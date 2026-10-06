@@ -27,7 +27,14 @@ from core.alertas import (
 )
 from core.indicador import calcular_indicador, ler_alertas_emitidos
 from core.indice import COMPONENTES, ler_indices, validar_pesos
-from core.relatorios import gerar_csv, gerar_pdf
+from core.relatorios import (
+    COLUNAS_SITUACAO,
+    SEM_INDICE,
+    gerar_csv,
+    gerar_pdf,
+    montar_situacao_municipal,
+    resumo_por_classe,
+)
 
 EIXOS = {
     "prevencao": "Prevenção",
@@ -152,42 +159,48 @@ def renderizar_painel_principal() -> None:
 
 def renderizar_gestor() -> None:
     st.title("Visão nacional/estadual")
-    st.caption("Ranking de municípios, classes e comparação de calhas")
+    st.caption("Situação de todos os municípios, resumo por classe e relatórios")
     mostrar_aviso()
     try:
         cliente, _ = exigir_perfil(PERFIS_GESTAO)
         municipios = carregar_municipios(cliente)
-        indices = ler_indices(cliente)
+        indices = ler_indices(cliente, limite=5000)
+        alertas = (
+            cliente.table("alertas")
+            .select("municipio_id,classe,status,criado_em")
+            .order("criado_em", desc=True)
+            .limit(2000)
+            .execute()
+            .data
+            or []
+        )
     except Exception as erro:
         st.error(f"Não foi possível carregar a visão de gestão: {erro}")
         return
-    linhas = [
-        {
-            "Município": _nome_municipio(municipios, indice["municipio_id"]),
-            "Classe": indice["classe"],
-            "Índice": indice["score_total"],
-            "Hora leitura (UTC)": indice.get("data_hora_leitura_referencia"),
-            "Fontes e horários": formatar_fontes(indice.get("fontes_json")),
-        }
-        for indice in indices
-    ]
-    linhas.sort(key=lambda linha: linha["Índice"] or -1, reverse=True)
-    colunas = ["Município", "Classe", "Índice", "Hora leitura (UTC)", "Fontes e horários"]
-    titulo_relatorio = "Ranking de municípios — Centro de Inteligência da Defesa Civil"
-    arquivo = "ranking_municipios"
-    if linhas:
-        st.dataframe(linhas, hide_index=True, use_container_width=True)
-        st.caption("Calhas não comparáveis sem geometria e vínculo hidrológico confirmados.")
-    else:
-        st.info("Sem índices verificáveis para ranking ou comparação.")
-        # Sem índices, o relatório lista apenas os municípios cadastrados.
-        colunas = ["Município", "Código IBGE"]
-        linhas = [
-            {"Município": _nome_municipio(municipios, codigo), "Código IBGE": codigo}
-            for codigo in municipios
-        ]
-        titulo_relatorio = "Municípios cadastrados — Centro de Inteligência da Defesa Civil"
-        arquivo = "municipios"
+
+    ufs = sorted({m.get("uf", "") for m in municipios.values() if m.get("uf")})
+    uf = st.selectbox("UF", ["Todas", *ufs])
+    if uf != "Todas":
+        municipios = {c: m for c, m in municipios.items() if m.get("uf") == uf}
+    linhas = montar_situacao_municipal(municipios, indices, alertas)
+    resumo = resumo_por_classe(linhas)
+
+    st.subheader("Resumo por classe")
+    colunas_resumo = st.columns(min(len(resumo), 4))
+    for posicao, (rotulo, valor) in enumerate(resumo.items()):
+        colunas_resumo[posicao % len(colunas_resumo)].metric(
+            rotulo.replace("Municípios — ", ""), valor
+        )
+    if not indices:
+        st.info(
+            "Nenhum índice calculado ainda: municípios aparecem como "
+            f'"{SEM_INDICE}" até o motor gerar índices verificáveis.'
+        )
+
+    st.subheader("Situação por município")
+    st.dataframe(linhas, hide_index=True, use_container_width=True)
+    st.caption("Calhas não comparáveis sem geometria e vínculo hidrológico confirmados.")
+
     resumo_indicador: dict[str, Any] = {}
     try:
         resumo_indicador = calcular_indicador(ler_alertas_emitidos(cliente))
@@ -205,27 +218,32 @@ def renderizar_gestor() -> None:
         st.warning(f"Indicador indisponível: {erro}")
 
     st.subheader("Exportar relatório")
+    sufixo = "" if uf == "Todas" else f"_{uf}"
     st.download_button(
         "Baixar CSV",
-        gerar_csv(linhas, colunas),
-        file_name=f"{arquivo}.csv",
+        gerar_csv(linhas, COLUNAS_SITUACAO),
+        file_name=f"situacao_municipios{sufixo}.csv",
         mime="text/csv",
     )
     try:
+        resumo_pdf = {**resumo}
+        if resumo_indicador:
+            media = resumo_indicador["media_minutos"]
+            resumo_pdf["Indicador leitura-emissao (min, média)"] = media
+            resumo_pdf["Meta (min)"] = resumo_indicador["meta_minutos"]
         st.download_button(
             "Baixar PDF",
             gerar_pdf(
-                titulo_relatorio,
+                "Situação dos municípios — Centro de Inteligência da Defesa Civil",
                 linhas,
-                colunas[:4],
-                resumo=resumo_indicador or None,
+                ["Município", "UF", "Classe", "Índice", "Último alerta"],
+                resumo=resumo_pdf,
             ),
-            file_name=f"{arquivo}.pdf",
+            file_name=f"situacao_municipios{sufixo}.pdf",
             mime="application/pdf",
         )
     except Exception as erro:
         st.warning(f"PDF indisponível: {erro}")
-
 
 def renderizar_alertas() -> None:
     st.title("Painel secundário de alertas")

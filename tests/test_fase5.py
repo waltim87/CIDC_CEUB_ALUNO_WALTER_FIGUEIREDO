@@ -79,5 +79,40 @@ class ApiTest(unittest.TestCase):
         self.assertNotIn("x", resposta.text.replace("indisponível", ""))
 
 
+class SituacaoMunicipalTest(unittest.TestCase):
+    MUNICIPIOS = {
+        "1": {"nome": "Beta", "uf": "AM"},
+        "2": {"nome": "Alfa", "uf": "AM"},
+        "3": {"nome": "Gama", "uf": "PA"},
+    }
+
+    def test_uma_linha_por_municipio_e_ultimo_indice(self):
+        from core.relatorios import montar_situacao_municipal
+
+        indices = [
+            {"municipio_id": "1", "classe": "Alto", "score_total": 70, "fontes_json": [{"nome": "ANA"}]},
+            {"municipio_id": "1", "classe": "Normal", "score_total": 10, "fontes_json": []},
+        ]
+        alertas = [{"municipio_id": "2", "classe": "Alerta", "status": "enviado"}]
+        linhas = montar_situacao_municipal(self.MUNICIPIOS, indices, alertas)
+        self.assertEqual(len(linhas), 3)
+        self.assertEqual(linhas[0]["Município"], "Beta")
+        self.assertEqual(linhas[0]["Classe"], "Alto")
+        self.assertEqual(linhas[0]["Fontes"], "ANA")
+        sem = {l["Município"]: l for l in linhas[1:]}
+        self.assertEqual(sem["Alfa"]["Classe"], "Sem índice")
+        self.assertIsNone(sem["Alfa"]["Índice"])
+        self.assertEqual(sem["Alfa"]["Último alerta"], "Alerta (enviado)")
+        self.assertEqual(sem["Gama"]["Último alerta"], "Nenhum")
+
+    def test_resumo_por_classe(self):
+        from core.relatorios import montar_situacao_municipal, resumo_por_classe
+
+        linhas = montar_situacao_municipal(self.MUNICIPIOS, [], [])
+        resumo = resumo_por_classe(linhas)
+        self.assertEqual(resumo["Total de municípios"], 3)
+        self.assertEqual(resumo["Municípios — Sem índice"], 3)
+
+
 if __name__ == "__main__":
     unittest.main()

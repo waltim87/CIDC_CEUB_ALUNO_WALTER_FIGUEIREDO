@@ -78,3 +78,80 @@ def gerar_pdf(
             pdf.cell(largura, 6, _latin1(valor)[:28], border=1)
         pdf.ln()
     return bytes(pdf.output())
+
+
+COLUNAS_SITUACAO = [
+    "Município",
+    "UF",
+    "Código IBGE",
+    "Classe",
+    "Índice",
+    "Hora leitura (UTC)",
+    "Último alerta",
+    "Fontes",
+]
+SEM_INDICE = "Sem índice"
+
+
+def montar_situacao_municipal(
+    municipios: Mapping[str, Mapping[str, Any]],
+    indices: Sequence[Mapping[str, Any]],
+    alertas: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Uma linha por município: índice mais recente e último alerta.
+
+    `indices` e `alertas` devem vir ordenados do mais recente para o mais antigo.
+    Municípios sem índice aparecem como "Sem índice", sem valor inventado.
+    """
+    ultimo_indice: dict[str, Mapping[str, Any]] = {}
+    for indice in indices:
+        ultimo_indice.setdefault(str(indice["municipio_id"]).strip(), indice)
+    ultimo_alerta: dict[str, Mapping[str, Any]] = {}
+    for alerta in alertas:
+        ultimo_alerta.setdefault(str(alerta["municipio_id"]).strip(), alerta)
+
+    linhas = []
+    for codigo, municipio in municipios.items():
+        indice = ultimo_indice.get(codigo)
+        alerta = ultimo_alerta.get(codigo)
+        fontes = ""
+        if indice:
+            nomes = [
+                str(f.get("nome", f.get("fonte")))
+                for f in (indice.get("fontes_json") or [])
+                if isinstance(f, Mapping) and (f.get("nome") or f.get("fonte"))
+            ]
+            fontes = ", ".join(dict.fromkeys(nomes))
+        linhas.append(
+            {
+                "Município": municipio.get("nome", codigo),
+                "UF": municipio.get("uf", ""),
+                "Código IBGE": codigo,
+                "Classe": indice["classe"] if indice else SEM_INDICE,
+                "Índice": indice["score_total"] if indice else None,
+                "Hora leitura (UTC)": (
+                    indice.get("data_hora_leitura_referencia") if indice else None
+                ),
+                "Último alerta": (
+                    f"{alerta['classe']} ({alerta['status']})" if alerta else "Nenhum"
+                ),
+                "Fontes": fontes,
+            }
+        )
+    linhas.sort(
+        key=lambda linha: (
+            linha["Índice"] is None,
+            -(linha["Índice"] or 0),
+            linha["Município"],
+        )
+    )
+    return linhas
+
+
+def resumo_por_classe(linhas: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Contagem de municípios por classe, incluindo os sem índice."""
+    contagem: dict[str, int] = {"Total de municípios": len(linhas)}
+    for linha in linhas:
+        chave = f"Municípios — {linha['Classe']}"
+        contagem[chave] = contagem.get(chave, 0) + 1
+    return contagem
