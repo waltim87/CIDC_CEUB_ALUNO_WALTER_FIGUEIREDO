@@ -551,8 +551,65 @@ def renderizar_monitoramento() -> None:
         st.dataframe(estacoes.data or [], hide_index=True, use_container_width=True)
         st.subheader("Leituras recentes")
         st.dataframe(leituras.data or [], hide_index=True, use_container_width=True)
+        _renderizar_comparacao_historica(cliente, leituras.data or [])
     except Exception as erro:
         st.error(f"Não foi possível carregar o monitoramento: {erro}")
+
+
+def _renderizar_comparacao_historica(cliente: Any, leituras: list[dict[str, Any]]) -> None:
+    from core.historico import comparar_com_historico, extremos_observados
+
+    st.subheader("Nível atual x cheia e seca históricas")
+    st.caption(
+        "Marcadores históricos só aparecem quando preenchidos a partir de série oficial "
+        "(ANA/Hidroweb, SGB); nada é presumido."
+    )
+    try:
+        estacoes = (
+            cliente.table("estacoes")
+            .select(
+                "id,nome,rio,cheia_historica_cm,cheia_historica_data,"
+                "seca_historica_cm,seca_historica_data,historico_fonte"
+            )
+            .limit(1000)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as erro:
+        st.warning(f"Marcadores históricos indisponíveis (aplique a migration 202610060003): {erro}")
+        return
+    linhas = []
+    for estacao in estacoes:
+        serie = [x for x in leituras if x.get("estacao_id") == estacao["id"]]
+        if not serie:
+            continue
+        atual = serie[0]
+        comparacao = comparar_com_historico(
+            atual.get("nivel_cm"),
+            estacao.get("cheia_historica_cm"),
+            estacao.get("seca_historica_cm"),
+        )
+        maior, menor = extremos_observados([x.get("nivel_cm") for x in serie])
+        linhas.append(
+            {
+                "Estação": estacao.get("nome"),
+                "Nível atual (cm)": atual.get("nivel_cm"),
+                "Cheia histórica (cm)": estacao.get("cheia_historica_cm"),
+                "Seca histórica (cm)": estacao.get("seca_historica_cm"),
+                "Dif. p/ cheia (cm)": comparacao["dif_cheia_cm"],
+                "Dif. p/ seca (cm)": comparacao["dif_seca_cm"],
+                "Posição seca→cheia (%)": comparacao["posicao_pct"],
+                "Situação": comparacao["situacao"],
+                "Máx. na série carregada": maior,
+                "Mín. na série carregada": menor,
+                "Fonte do histórico": estacao.get("historico_fonte"),
+            }
+        )
+    if not linhas:
+        st.info("Sem leituras de estações para comparar ainda.")
+        return
+    st.dataframe(linhas, hide_index=True, use_container_width=True)
 
 
 def renderizar_agente_campo() -> None:
