@@ -42,6 +42,7 @@ def gerar_pdf(
     colunas: Sequence[str],
     *,
     resumo: Mapping[str, Any] | None = None,
+    colunas_detalhe: Sequence[str] | None = None,
 ) -> bytes:
     """PDF simples em paisagem: aviso, resumo opcional e tabela."""
     from fpdf import FPDF
@@ -78,7 +79,34 @@ def gerar_pdf(
             valor = linha.get(coluna)
             pdf.cell(largura, 6, _latin1(valor)[:limite], border=1)
         pdf.ln()
+    if colunas_detalhe:
+        _anexar_fichas(pdf, linhas, colunas_detalhe)
     return bytes(pdf.output())
+
+
+def _anexar_fichas(pdf: Any, linhas: Sequence[Mapping[str, Any]], colunas: Sequence[str]) -> None:
+    """Uma ficha por município com todas as colunas do CSV, em 4 colunas de texto."""
+    por_linha = 4
+    largura = (pdf.w - pdf.l_margin - pdf.r_margin) / por_linha
+    limite = max(int(largura / 1.5), 10)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "Fichas por municipio (mesmos campos do CSV)", new_x="LMARGIN", new_y="NEXT")
+    for linha in linhas:
+        if pdf.get_y() > pdf.h - 12 - 6 * (len(colunas) // por_linha + 3):
+            pdf.add_page()
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_fill_color(230, 230, 230)
+        cabecalho = f"{linha.get('Município', '')} - {linha.get('UF', '')}"
+        pdf.cell(0, 6, _latin1(cabecalho), fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 7)
+        for inicio in range(0, len(colunas), por_linha):
+            for coluna in colunas[inicio:inicio + por_linha]:
+                valor = linha.get(coluna)
+                texto = f"{coluna}: {'' if valor is None else valor}"
+                pdf.cell(largura, 5, _latin1(texto)[:limite])
+            pdf.ln()
+        pdf.ln(2)
 
 
 COLUNAS_SITUACAO = [

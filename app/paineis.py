@@ -276,8 +276,9 @@ def renderizar_gestor() -> None:
             gerar_pdf(
                 "Situação dos municípios — Centro de Inteligência da Defesa Civil",
                 linhas,
-                ["Município", "UF", "Classe", "Índice", "Último alerta"],
+                COLUNAS_PDF_DETALHADO,
                 resumo=resumo_pdf,
+                colunas_detalhe=COLUNAS_DETALHADAS,
             ),
             file_name=f"situacao_municipios{sufixo}.pdf",
             mime="application/pdf",
