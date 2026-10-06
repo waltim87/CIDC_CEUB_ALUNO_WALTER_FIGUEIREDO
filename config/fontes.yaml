@@ -29,3 +29,93 @@ ana:
     - nome: "CONFIRMAR - estação piloto do Purus em Boca do Acre/AM"
       codigo_oficial: CONFIRMAR
       municipio_id_ibge: "1300706"
+
+inpe:
+  nome: INPE Queimadas
+  tipo: focos_calor
+  periodicidade_min: 1440
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  formato: csv
+  caminho_registros: CONFIRMAR
+  campos: CONFIRMAR
+  documentacao_oficial: https://www.gov.br/inpe/pt-br/acesso-a-informacao/dados-abertos/monitoramento-ambiental/monitoramento-de-queimadas
+  observacao: "Confirmar URL direta, filtros, esquema e horário de atualização do CSV diário."
+
+inmet:
+  nome: INMET
+  tipo: meteorologia
+  periodicidade_min: 60
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  formato: json
+  caminho_registros: CONFIRMAR
+  campos: CONFIRMAR
+  autenticacao:
+    tipo: CONFIRMAR
+    variavel_ambiente: INMET_API_TOKEN
+  documentacao_oficial: https://portal.inmet.gov.br/dadoshistoricos
+  observacao: "Confirmar contrato da API, autenticação, nomes de campos e unidades."
+
+sgb:
+  nome: SGB SACE
+  tipo: alertas_hidrologicos
+  periodicidade_min: 60
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  formato: json
+  caminho_registros: CONFIRMAR
+  campos: CONFIRMAR
+  documentacao_oficial: CONFIRMAR
+  observacao: "Localizar e confirmar serviço aberto dos boletins SACE antes de ativar."
+
+cemaden:
+  nome: Cemaden PED
+  tipo: monitoramento
+  periodicidade_min: 60
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  formato: json
+  caminho_registros: CONFIRMAR
+  campos: CONFIRMAR
+  documentacao_oficial: https://sws.cemaden.gov.br/PED/api/ui/swagger.json
+  observacao: "O Swagger público existe; confirmar endpoint útil, autenticação e política de acesso."
+
+ibge:
+  nome: IBGE API de Localidades
+  tipo: municipios
+  periodicidade_min: 10080
+  status: ativo
+  endpoint: https://servicodados.ibge.gov.br/api/v1/localidades/estados/13/municipios
+  formato: json
+  caminho_registros: ""
+  campos:
+    id_ibge: id
+    nome: nome
+  uf: AM
+  documentacao_oficial: https://servicodados.ibge.gov.br/api/docs/localidades
+  observacao: "Endpoint oficial consultado; retorna os municípios da UF de código IBGE 13 (AM)."
+
+cnes:
+  nome: CNES Dados Abertos
+  tipo: infraestrutura_saude
+  periodicidade_min: 10080
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  formato: csv
+  caminho_registros: CONFIRMAR
+  campos: CONFIRMAR
+  documentacao_oficial: https://dadosabertos.saude.gov.br/dataset/cnes-cadastro-nacional-de-estabelecimentos-de-saude
+  observacao: "Confirmar arquivo de estabelecimentos, URL mensal, codificação e esquema."
+
+inep:
+  nome: INEP Dados Abertos
+  tipo: infraestrutura_escolar
+  periodicidade_min: 43200
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  formato: csv
+  caminho_registros: CONFIRMAR
+  campos: CONFIRMAR
+  documentacao_oficial: https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos
+  observacao: "Confirmar arquivo de escolas, versão, URL, codificação e esquema."

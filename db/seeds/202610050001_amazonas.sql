@@ -1,13 +1,64 @@
 insert into public.fontes (nome, url, tipo, periodicidade_min, status)
-values (
-    'ANA HidroWebService',
-    null,
-    'hidrologia',
-    60,
-    'pendente_confirmacao'
-)
+values
+    (
+        'ANA HidroWebService',
+        null,
+        'hidrologia',
+        60,
+        'pendente_confirmacao'
+    ),
+    (
+        'INPE Queimadas',
+        'https://www.gov.br/inpe/pt-br/acesso-a-informacao/dados-abertos/monitoramento-ambiental/monitoramento-de-queimadas',
+        'focos_calor',
+        1440,
+        'pendente_confirmacao'
+    ),
+    (
+        'INMET',
+        'https://portal.inmet.gov.br/dadoshistoricos',
+        'meteorologia',
+        60,
+        'pendente_confirmacao'
+    ),
+    (
+        'SGB SACE',
+        null,
+        'alertas_hidrologicos',
+        60,
+        'pendente_confirmacao'
+    ),
+    (
+        'Cemaden PED',
+        'https://sws.cemaden.gov.br/PED/api/ui/swagger.json',
+        'monitoramento',
+        60,
+        'pendente_confirmacao'
+    ),
+    (
+        'IBGE API de Localidades',
+        'https://servicodados.ibge.gov.br/api/v1/localidades/estados/13/municipios',
+        'municipios',
+        10080,
+        'operacional'
+    ),
+    (
+        'CNES Dados Abertos',
+        'https://dadosabertos.saude.gov.br/dataset/cnes-cadastro-nacional-de-estabelecimentos-de-saude',
+        'infraestrutura_saude',
+        10080,
+        'pendente_confirmacao'
+    ),
+    (
+        'INEP Dados Abertos',
+        'https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos',
+        'infraestrutura_escolar',
+        43200,
+        'pendente_confirmacao'
+    )
 on conflict (nome) do update
-set tipo = excluded.tipo,
+set url = excluded.url,
+    tipo = excluded.tipo,
     periodicidade_min = excluded.periodicidade_min;
 
 insert into public.municipios (id_ibge, nome, uf)

@@ -82,4 +82,38 @@ confira que há 62 linhas em `municipios`, 3 marcadores sem `codigo_oficial` em
 Esta entrega não insere leituras reais: os manuais, credenciais de acesso à ANA
 e identificação oficial das estações precisam ser confirmados. A integração não
 inventa endpoint, formato de resposta, códigos ou valores. Os demais coletores,
-índice, painéis, perfis, notificações e API pública pertencem às fases seguintes.
+índice, painéis, perfis, notificações e API pública são implementados por fases.
+
+## Fase 2 — demais fontes e saúde das coletas
+
+Os módulos por fonte ficam em `collectors/` e expõem `coletar()`. O coletor do
+IBGE usa a API de Localidades oficial para listar os municípios do Amazonas; os
+outros seis adaptadores (INPE, INMET, SGB/SACE, Cemaden, CNES e INEP) só consultam
+uma fonte quando endpoint, formato e campos forem confirmados em seus materiais
+oficiais e substituídos no `config/fontes.yaml`. Enquanto isso, permanecem
+bloqueados para evitar tráfego a endereços ou formatos presumidos.
+
+Os adaptadores compartilham normalização de registros JSON/CSV e metadados de
+fonte/horário de coleta em `collectors/comum.py`. `collectors/saude.py` tenta
+cada fonte isoladamente, registra falhas e permite atualizar `status`,
+`ultima_verificacao`, `ultimo_erro` e `ultima_coleta` no Supabase, sem apagar o
+horário da última coleta bem-sucedida quando a fonte falha.
+
+Para instalar a migration de saúde das fontes no projeto Supabase, execute no
+SQL Editor:
+
+1. `db/migrations/202610050002_saude_fontes.sql`
+2. Execute novamente `db/seeds/202610050001_amazonas.sql` para registrar as fontes
+   desta fase.
+
+Verificação local com respostas simuladas:
+
+```powershell
+python -m unittest discover -s tests -v
+python -m collectors.saude
+```
+
+O segundo comando consulta o endpoint público confirmado do IBGE e reporta como
+pendentes as demais fontes até que sua configuração oficial seja completada.
+Para persistir os municípios coletados pelo IBGE, use
+`collectors.ibge.coletar()` e depois `collectors.ibge.persistir(registros)`.

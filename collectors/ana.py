@@ -17,13 +17,11 @@ import requests
 import yaml
 from dotenv import load_dotenv
 
+from collectors.comum import ConfiguracaoPendenteError
+
 LOGGER = logging.getLogger(__name__)
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "fontes.yaml"
 VALOR_PENDENTE = "CONFIRMAR"
-
-
-class ConfiguracaoPendenteError(RuntimeError):
-    """Indica que a integração ainda depende de confirmação na fonte oficial."""
 
 
 def carregar_configuracao(caminho: Path = CONFIG_PATH) -> dict[str, Any]:
