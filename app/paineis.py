@@ -161,9 +161,6 @@ def renderizar_gestor() -> None:
     except Exception as erro:
         st.error(f"Não foi possível carregar a visão de gestão: {erro}")
         return
-    if not indices:
-        st.info("Sem índices verificáveis para ranking ou comparação.")
-        return
     linhas = [
         {
             "Município": _nome_municipio(municipios, indice["municipio_id"]),
@@ -175,10 +172,22 @@ def renderizar_gestor() -> None:
         for indice in indices
     ]
     linhas.sort(key=lambda linha: linha["Índice"] or -1, reverse=True)
-    st.dataframe(linhas, hide_index=True, use_container_width=True)
-    st.caption("Calhas não comparáveis sem geometria e vínculo hidrológico confirmados.")
-
     colunas = ["Município", "Classe", "Índice", "Hora leitura (UTC)", "Fontes e horários"]
+    titulo_relatorio = "Ranking de municípios — Centro de Inteligência da Defesa Civil"
+    arquivo = "ranking_municipios"
+    if linhas:
+        st.dataframe(linhas, hide_index=True, use_container_width=True)
+        st.caption("Calhas não comparáveis sem geometria e vínculo hidrológico confirmados.")
+    else:
+        st.info("Sem índices verificáveis para ranking ou comparação.")
+        # Sem índices, o relatório lista apenas os municípios cadastrados.
+        colunas = ["Município", "Código IBGE"]
+        linhas = [
+            {"Município": _nome_municipio(municipios, codigo), "Código IBGE": codigo}
+            for codigo in municipios
+        ]
+        titulo_relatorio = "Municípios cadastrados — Centro de Inteligência da Defesa Civil"
+        arquivo = "municipios"
     resumo_indicador: dict[str, Any] = {}
     try:
         resumo_indicador = calcular_indicador(ler_alertas_emitidos(cliente))
@@ -199,19 +208,19 @@ def renderizar_gestor() -> None:
     st.download_button(
         "Baixar CSV",
         gerar_csv(linhas, colunas),
-        file_name="ranking_municipios.csv",
+        file_name=f"{arquivo}.csv",
         mime="text/csv",
     )
     try:
         st.download_button(
             "Baixar PDF",
             gerar_pdf(
-                "Ranking de municípios — Centro de Inteligência da Defesa Civil",
+                titulo_relatorio,
                 linhas,
                 colunas[:4],
                 resumo=resumo_indicador or None,
             ),
-            file_name="ranking_municipios.pdf",
+            file_name=f"{arquivo}.pdf",
             mime="application/pdf",
         )
     except Exception as erro:
