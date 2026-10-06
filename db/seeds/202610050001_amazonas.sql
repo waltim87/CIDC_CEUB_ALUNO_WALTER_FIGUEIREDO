@@ -154,7 +154,7 @@ where fontes.nome = 'ANA HidroWebService'
 insert into public.configuracao_pesos (nome, pesos_json, validacao_oficial)
 values (
     'hipotese_inicial_indice_impacto_humanitario',
-    '{"hidrologia":30,"populacao":25,"infraestrutura":20,"logistica":15,"vulnerabilidade_duracao":10}'::jsonb,
+    '{"hidrologia":30,"populacao":25,"infraestrutura":20,"logistica":15,"vulnerabilidade":10}'::jsonb,
     false
 )
 on conflict (nome) do update

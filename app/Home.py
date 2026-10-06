@@ -1,98 +1,112 @@
-"""Painel principal de situação e tendência municipal."""
+"""Entrada com autenticação e navegação conforme perfil autorizado."""
 
 from __future__ import annotations
 
 import streamlit as st
 
-from app.comum import (
-    carregar_municipios,
-    carregar_pesos,
-    cliente_supabase,
-    mostrar_aviso,
+from app.auth import (
+    cliente_publico,
+    encerrar_sessao,
+    obter_perfil,
+    renderizar_login,
 )
-from core.alertas import formatar_fontes
-from core.indice import ler_indices
+from app.paineis import (
+    renderizar_alertas,
+    renderizar_administracao,
+    renderizar_agente_campo,
+    renderizar_gestor,
+    renderizar_painel_principal,
+    renderizar_pesquisador,
+    renderizar_publico,
+    renderizar_saude,
+    renderizar_logistica,
+    renderizar_coordenador,
+    renderizar_monitoramento,
+)
 
-st.set_page_config(page_title="Painel principal | CIDC", page_icon="🌧️", layout="wide")
-st.title("Centro de Inteligência da Defesa Civil")
-st.caption("Painel principal — situação municipal e tendências")
-mostrar_aviso()
-st.info(
-    "Fase 3: índice e rascunhos de alerta. Os alertas não são enviados automaticamente; "
-    "a aprovação humana é obrigatória."
-)
+st.set_page_config(page_title="CIDC | Defesa Civil", page_icon="🌧️", layout="wide")
 
 try:
-    cliente = cliente_supabase()
-    pesos, validacao_oficial = carregar_pesos(cliente)
-    municipios = carregar_municipios(cliente)
-    indices = ler_indices(cliente)
+    cliente = cliente_publico()
+    perfil = obter_perfil(cliente)
+except PermissionError as erro:
+    st.error(str(erro))
+    if st.button("Sair desta conta", use_container_width=True):
+        try:
+            encerrar_sessao(cliente)
+            st.rerun()
+        except Exception as falha:
+            st.error(f"A sessão local foi encerrada, mas o logout remoto falhou: {falha}")
+    st.stop()
 except Exception as erro:
-    st.error(f"Não foi possível carregar o painel: {erro}")
+    st.error(f"Não foi possível iniciar a aplicação: {erro}")
     st.stop()
 
-st.subheader("Hipótese de pesos do índice")
-st.caption(
-    "Pesos configuráveis persistidos no Supabase. "
-    + ("Validação oficial registrada." if validacao_oficial else "Pesos ainda sem validação oficial.")
-)
-st.dataframe(
-    [
-        {"Componente": nome.replace("_", " ").title(), "Peso (%)": peso}
-        for nome, peso in pesos.items()
-    ],
-    hide_index=True,
-    use_container_width=True,
-)
+pagina_publica = st.Page(renderizar_publico, title="Situação pública", icon="🌎")
 
-if not indices:
-    st.info(
-        "Ainda não há índices calculados com evidências. O painel não cria valores "
-        "de demonstração nem interpreta ausência de leituras como risco zero."
-    )
-    st.stop()
+if perfil is None:
+    st.navigation(
+        [
+            st.Page(renderizar_login, title="Entrar", icon="🔐", default=True),
+            pagina_publica,
+        ],
+        position="sidebar",
+    ).run()
+else:
+    st.sidebar.success(f"{perfil['nome']} · {perfil['perfil']}")
+    if st.sidebar.button("Sair", use_container_width=True):
+        try:
+            encerrar_sessao(cliente)
+            st.rerun()
+        except Exception as erro:
+            st.error(f"A sessão local foi encerrada, mas o logout remoto falhou: {erro}")
 
-linhas = []
-for indice in indices:
-    municipio = municipios.get(indice["municipio_id"].strip(), {})
-    linhas.append(
-        {
-            "Município": municipio.get("nome", indice["municipio_id"]),
-            "UF": municipio.get("uf", ""),
-            "Classe": indice["classe"],
-            "Índice": indice["score_total"],
-            "Data/hora do índice (UTC)": indice["data_hora"],
-            "Data/hora da leitura de referência (UTC)": indice.get(
-                "data_hora_leitura_referencia"
-            ),
-            "Fontes e leituras": formatar_fontes(indice.get("fontes_json")),
-        }
-    )
-
-st.subheader("Índices mais recentes")
-st.dataframe(linhas, hide_index=True, use_container_width=True)
-
-selecionado = st.selectbox(
-    "Ver explicação do índice",
-    range(len(indices)),
-    format_func=lambda pos: (
-        f"{municipios.get(indices[pos]['municipio_id'].strip(), {}).get('nome', indices[pos]['municipio_id'])} — "
-        f"{indices[pos]['classe']} ({indices[pos]['score_total']})"
-    ),
-)
-indice = indices[selecionado]
-municipio = municipios.get(indice["municipio_id"].strip(), {})
-st.subheader(
-    f"Explicação: {municipio.get('nome', indice['municipio_id'])}/"
-    f"{municipio.get('uf', '')}"
-)
-st.caption(
-    f"Fontes e leituras: {formatar_fontes(indice.get('fontes_json'))} · "
-    f"Leitura de referência: {indice.get('data_hora_leitura_referencia') or 'não informada'} · "
-    f"Índice calculado: {indice['data_hora']}"
-)
-st.dataframe(
-    indice.get("explicacao_json", []),
-    hide_index=True,
-    use_container_width=True,
-)
+    paginas = [
+        st.Page(renderizar_painel_principal, title="Painel principal", icon="📊"),
+        pagina_publica,
+    ]
+    nome_perfil = perfil["perfil"]
+    if nome_perfil in {"gestor_nacional", "gestor_estadual", "administrador"}:
+        paginas.insert(
+            1,
+            st.Page(renderizar_gestor, title="Visão estadual/nacional", icon="🗺️"),
+        )
+    if nome_perfil in {
+        "gestor_nacional",
+        "gestor_estadual",
+        "administrador",
+        "operador_monitoramento",
+        "coordenador_municipal",
+    }:
+        paginas.append(
+            st.Page(renderizar_alertas, title="Revisão de alertas", icon="🚨")
+        )
+    if nome_perfil in {"coordenador_municipal", "administrador"}:
+        paginas.append(
+            st.Page(renderizar_coordenador, title="Gestão municipal", icon="🏘️")
+        )
+    if nome_perfil in {"operador_monitoramento", "administrador"}:
+        paginas.append(
+            st.Page(renderizar_monitoramento, title="Sala de monitoramento", icon="📡")
+        )
+    if nome_perfil in {"agente_campo", "coordenador_municipal", "administrador"}:
+        paginas.append(
+            st.Page(renderizar_agente_campo, title="Registro de campo", icon="📍")
+        )
+    if nome_perfil in {"saude_assistencia", "coordenador_municipal", "administrador"}:
+        paginas.append(
+            st.Page(renderizar_saude, title="Saúde e assistência", icon="🏥")
+        )
+    if nome_perfil in {"logistica_abastecimento", "coordenador_municipal", "administrador"}:
+        paginas.append(
+            st.Page(renderizar_logistica, title="Logística e recursos", icon="🚤")
+        )
+    if nome_perfil in {"pesquisador", "administrador"}:
+        paginas.append(
+            st.Page(renderizar_pesquisador, title="Dados e metodologia", icon="📚")
+        )
+    if nome_perfil == "administrador":
+        paginas.append(
+            st.Page(renderizar_administracao, title="Administração", icon="⚙️")
+        )
+    st.navigation(paginas, position="sidebar").run()

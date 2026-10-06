@@ -29,9 +29,11 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Preencha `.env` com o Project URL e a chave `service_role` disponíveis nas
-configurações do projeto Supabase. Não use a chave `anon` para a gravação pelo
-coletor. Não envie esses valores por chat.
+Para o coletor local, preencha `SUPABASE_URL` e
+`SUPABASE_SERVICE_ROLE_KEY` em `.env`; essa chave administrativa nunca deve ir
+para o Streamlit ou para o GitHub. Para abrir o painel, preencha
+`SUPABASE_ANON_KEY`, que respeita as políticas RLS, e entre com uma conta Auth.
+Não envie esses valores por chat.
 
 ### Criar tabelas e dados de referência
 
@@ -40,10 +42,11 @@ No painel do Supabase, abra **SQL Editor** e execute, na ordem:
 1. `db/migrations/202610050001_schema_inicial.sql`
 2. `db/seeds/202610050001_amazonas.sql`
 
-A migration habilita PostGIS, cria o esquema e liga RLS em todas as tabelas.
-Até a Fase 4, não existem políticas para usuários autenticados; o acesso de
-gravação pelo coletor usa a chave `service_role` local, que ignora RLS. O seed
-inclui os 62 municípios do Amazonas identificados pelo IBGE. As três linhas de
+A migration habilita PostGIS, cria o esquema e liga RLS em todas as tabelas. As
+políticas por perfil e município são adicionadas pela migration da Fase 4; até
+aplicá-la no projeto remoto, não publique o Streamlit. O coletor local usa a
+chave `service_role`, que ignora RLS. O seed inclui os 62 municípios do Amazonas
+identificados pelo IBGE. As três linhas de
 estação do Purus são **marcadores pendentes**, com código oficial nulo; não são
 estações reais confirmadas e não geram leituras.
 
@@ -141,21 +144,86 @@ cada fonte usada no índice, nome e `data_hora_leitura` com fuso horário. Esses
 dados ficam no índice e acompanham o alerta para que valores e sugestões tenham
 proveniência visível.
 
+O processo coletor/backend pode usar `SUPABASE_SERVICE_ROLE_KEY` apenas no
+ambiente local confiável (nunca no Streamlit Cloud). Os painéis usam somente
+`SUPABASE_ANON_KEY`, autenticação de usuário e as políticas RLS da Fase 4.
+
 Para abrir os painéis localmente, configure `SUPABASE_URL` e
-`SUPABASE_SERVICE_ROLE_KEY` apenas em `.env` e rode:
+`SUPABASE_ANON_KEY` em `.env` e rode:
 
 ```powershell
 streamlit run app/Home.py
 ```
 
 O painel secundário fica disponível no menu multipágina **Revisão de alertas**.
-Na Streamlit Community Cloud, cadastre os mesmos nomes em **App settings >
-Secrets**. A chave `service_role` dá acesso administrativo e ignora RLS; até a
-Fase 4 implementar login e políticas por perfil/município, mantenha os painéis
-privados e não publique esse app.
+Na Streamlit Community Cloud, cadastre `SUPABASE_URL` e `SUPABASE_ANON_KEY` em
+**App settings > Secrets**. Nunca configure `SUPABASE_SERVICE_ROLE_KEY` no app.
 
 Teste do cálculo do índice, regras e geração de rascunhos (sem envio):
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
+
+## Fase 4 — autenticação, escopo municipal e notificações
+
+Antes de abrir a aplicação a usuários, aplique a migration
+`db/migrations/202610050004_perfis_rls_assinaturas.sql` no SQL Editor do Supabase,
+depois de executar as migrations das Fases 1 a 3. Revise o SQL e valide RLS em um
+projeto de teste antes da implantação. Esta migration ainda não foi aplicada
+automaticamente ao projeto remoto.
+
+Crie usuários em **Supabase Dashboard > Authentication > Users** e associe cada
+UUID de Auth a um perfil CIDC em `public.usuarios`. Exemplo para adaptar no SQL
+Editor com valores confirmados pelo administrador:
+
+```sql
+insert into public.usuarios (nome, perfil, municipio_id, auth_id)
+values ('NOME CONFIRMADO', 'coordenador_municipal', 'CODIGO_IBGE', 'UUID_AUTH');
+```
+
+Perfis aceitos: `gestor_nacional`, `gestor_estadual`,
+`coordenador_municipal`, `operador_monitoramento`, `agente_campo`,
+`saude_assistencia`, `logistica_abastecimento`, `pesquisador` e
+`administrador`. Associe um código IBGE municipal aos perfis locais. Para
+`gestor_estadual`, o município associado identifica a UF e as políticas limitam
+o acesso aos municípios daquele estado. `gestor_nacional` e administração têm
+escopo municipal global; monitoramento tem leitura global somente para estações,
+leituras, índices e revisão de alertas. Pesquisador acessa apenas os dados
+públicos disponibilizados sem login. O login usa senha do Supabase Auth; não
+compartilhe credenciais pelo chat.
+
+Para habilitar canais de notificação, configure somente os canais que tiver
+credenciais gratuitas disponíveis:
+
+- Telegram: `TELEGRAM_BOT_TOKEN` em **App settings > Secrets** (ou no ambiente
+  local). O bot deve ter autorização para enviar ao destinatário cadastrado.
+- SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` e, opcionalmente,
+  `SMTP_FROM`. Use servidor e conta autorizados; não há provedor pago incluído.
+
+O painel permite cadastrar contatos inativos. A coordenação/logística deve
+verificar consentimento e controle do e-mail/conta antes de ativar a assinatura.
+Somente coordenador municipal ou administrador pode disparar mensagens, e apenas
+depois da aprovação humana. Falhas são registradas por destino com contato mascarado;
+entregas concluídas não são repetidas num reenvio parcial. Sem configuração de
+um canal, a entrega falha explicitamente e o alerta permanece aprovado.
+
+Verificação local da Fase 4:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+O teste simula os transportes e não envia e-mail/Telegram real. A migration RLS
+precisa também ser verificada no Supabase com contas de perfis distintos: usuário
+municipal não deve ler ou alterar outro município, perfil sem associação deve
+ser negado, dados públicos devem limitar-se a municípios, situação e alertas
+emitidos, e só administradores devem gerenciar perfis/regras/pesos.
+O acesso remoto ao banco não foi testado nesta fase.
+
+Limitações ainda abertas: a página pública não cadastra assinaturas diretamente;
+contatos são registrados pela coordenação, permanecem inativos até verificação
+manual de consentimento e controle, e só então podem receber alertas. O
+formulário de campo registra contagens e necessidades, mas ainda não captura
+fotos/localização nem oferece gravação offline. Esses fluxos exigem validação
+operacional antes de uso em campo.

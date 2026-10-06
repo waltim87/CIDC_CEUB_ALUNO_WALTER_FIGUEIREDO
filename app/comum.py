@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import streamlit as st
-from dotenv import load_dotenv
-from streamlit.errors import StreamlitSecretNotFoundError
+
+from app.auth import cliente_publico, obter_perfil
 
 AVISO_PROTOTIPO = (
     "Protótipo, sem validação oficial; confirme nos órgãos oficiais. "
@@ -16,23 +15,15 @@ AVISO_PROTOTIPO = (
 
 
 def cliente_supabase() -> Any:
-    load_dotenv()
-    try:
-        url_secret = st.secrets.get("SUPABASE_URL")
-        chave_secret = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
-    except StreamlitSecretNotFoundError:
-        url_secret = None
-        chave_secret = None
-    url = url_secret or os.environ.get("SUPABASE_URL")
-    chave = chave_secret or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not chave:
-        raise RuntimeError(
-            "Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nos Secrets "
-            "do Streamlit ou no ambiente local. Não publique a chave no código."
-        )
-    from supabase import create_client
+    return cliente_publico()
 
-    return create_client(url, chave)
+
+def exigir_perfil(perfis: set[str]) -> tuple[Any, dict[str, Any]]:
+    cliente = cliente_supabase()
+    perfil = obter_perfil(cliente)
+    if not perfil or perfil["perfil"] not in perfis:
+        raise PermissionError("Seu perfil não tem acesso a este painel.")
+    return cliente, perfil
 
 
 def mostrar_aviso() -> None:

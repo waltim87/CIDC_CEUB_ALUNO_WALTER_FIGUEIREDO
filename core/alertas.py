@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any, Mapping
-
-from dotenv import load_dotenv
 
 from core.indice import ROTULOS
 from core.regras import avaliar_regras
@@ -117,17 +114,6 @@ def criar_rascunhos_supabase(
     return inseridos
 
 
-def cliente_supabase():
-    load_dotenv()
-    url = os.environ.get("SUPABASE_URL")
-    chave = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not chave:
-        raise RuntimeError("Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente")
-    from supabase import create_client
-
-    return create_client(url, chave)
-
-
 def listar_alertas(
     cliente: Any, *, status: str | None = None, limite: int = 200
 ) -> list[dict[str, Any]]:
@@ -212,8 +198,23 @@ def atualizar_alerta(
 def marcar_enviado(
     cliente: Any, alerta_id: str, *, emitido_em: datetime | None = None
 ) -> dict[str, Any]:
-    """Fase 3 não envia mensagens; permite registar envio externo aprovado."""
-    instante = (emitido_em or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    """Registra envio depois que o módulo de notificações confirmou as entregas."""
+    existente = (
+        cliente.table("alertas")
+        .select("emitido_em")
+        .eq("id", alerta_id)
+        .eq("status", "aprovado")
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    horario_emitido = emitido_em
+    if horario_emitido is None and existente and existente[0].get("emitido_em"):
+        horario_emitido = datetime.fromisoformat(
+            existente[0]["emitido_em"].replace("Z", "+00:00")
+        )
+    instante = (horario_emitido or datetime.now(timezone.utc)).astimezone(timezone.utc)
     resultado = (
         cliente.table("alertas")
         .update({"status": "enviado", "emitido_em": instante.isoformat()})
