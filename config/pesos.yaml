@@ -1,0 +1,8 @@
+nome: hipotese_inicial_indice_impacto_humanitario
+validacao_oficial: false
+pesos:
+  hidrologia: 30
+  populacao: 25
+  infraestrutura: 20
+  logistica: 15
+  vulnerabilidade: 10

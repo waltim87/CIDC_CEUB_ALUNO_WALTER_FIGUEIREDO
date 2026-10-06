@@ -117,3 +117,45 @@ O segundo comando consulta o endpoint público confirmado do IBGE e reporta como
 pendentes as demais fontes até que sua configuração oficial seja completada.
 Para persistir os municípios coletados pelo IBGE, use
 `collectors.ibge.coletar()` e depois `collectors.ibge.persistir(registros)`.
+
+## Fase 3 — índice, regras e painéis
+
+Instale as dependências e aplique no SQL Editor do Supabase, nesta ordem:
+
+1. `db/migrations/202610050003_indice_alertas.sql`
+2. `db/seeds/202610050003_regras_iniciais.sql`
+
+Os pesos vêm de `config/pesos.yaml` e da tabela `configuracao_pesos`; qualquer
+alteração deve preservar a soma de 100. Os valores atuais são uma hipótese
+inicial não validada oficialmente. Componentes sem valor são omitidos e seus
+pesos são renormalizados entre os componentes disponíveis. Sem nenhum
+componente observável, o índice é indisponível — nunca presumido como zero.
+
+As regras de `config/regras.yaml` e os seeds SQL começam inativos para impedir
+alertas operacionais baseados em limiares hipotéticos. Um responsável precisa
+revisar e ativar regras no Supabase. O motor apenas registra rascunhos; não envia
+alertas por Telegram ou e-mail nesta fase.
+
+O ponto de integração `core.motor.calcular_e_gerar_rascunhos(...)` exige, para
+cada fonte usada no índice, nome e `data_hora_leitura` com fuso horário. Esses
+dados ficam no índice e acompanham o alerta para que valores e sugestões tenham
+proveniência visível.
+
+Para abrir os painéis localmente, configure `SUPABASE_URL` e
+`SUPABASE_SERVICE_ROLE_KEY` apenas em `.env` e rode:
+
+```powershell
+streamlit run app/Home.py
+```
+
+O painel secundário fica disponível no menu multipágina **Revisão de alertas**.
+Na Streamlit Community Cloud, cadastre os mesmos nomes em **App settings >
+Secrets**. A chave `service_role` dá acesso administrativo e ignora RLS; até a
+Fase 4 implementar login e políticas por perfil/município, mantenha os painéis
+privados e não publique esse app.
+
+Teste do cálculo do índice, regras e geração de rascunhos (sem envio):
+
+```powershell
+python -m unittest discover -s tests -v
+```

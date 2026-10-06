@@ -1,0 +1,38 @@
+observacao: "Hipóteses iniciais; regras inativas até validação e ativação por responsável."
+regras:
+  - nome: "Atenção - índice de 21 a 40"
+    classe: "Atenção"
+    condicao_json:
+      campo: score_total
+      operador: entre
+      valor: [21, 40]
+    acao_recomendada: "Revisar as leituras e o plano municipal de contingência."
+    reavaliar_em_horas: 6
+    ativa: false
+  - nome: "Alerta - índice de 41 a 60"
+    classe: "Alerta"
+    condicao_json:
+      campo: score_total
+      operador: entre
+      valor: [41, 60]
+    acao_recomendada: "Verificar comunidades expostas, recursos e rotas disponíveis."
+    reavaliar_em_horas: 3
+    ativa: false
+  - nome: "Alto - índice de 61 a 80"
+    classe: "Alto"
+    condicao_json:
+      campo: score_total
+      operador: entre
+      valor: [61, 80]
+    acao_recomendada: "Mobilizar a coordenação municipal para revisar preparação e resposta."
+    reavaliar_em_horas: 1
+    ativa: false
+  - nome: "Crítico - índice acima de 80"
+    classe: "Crítico"
+    condicao_json:
+      campo: score_total
+      operador: maior_que
+      valor: 80
+    acao_recomendada: "Acionar imediatamente a coordenação responsável e validar os dados."
+    reavaliar_em_horas: 1
+    ativa: false
