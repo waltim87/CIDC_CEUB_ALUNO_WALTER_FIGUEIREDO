@@ -261,3 +261,17 @@ python -m uvicorn api.main:app --port 8010
 ### Relatório da visão nacional/estadual
 
 Uma linha por município (CSV com 46 colunas, PDF com 11): população, calha, índice e componentes, situação oficial, alertas, comunidades, afetados, estações e última leitura, focos de calor, unidades de saúde e escolas, abrigos e ocupação, estoques, tarefas por eixo. Totais somam só o que está cadastrado; zero pode ser ausência de cadastro. Cada tabela é lida de forma isolada: se uma falhar, o relatório avisa e segue.
+
+## Etapa 6 — coleta automática (GitHub Actions)
+O workflow `.github/workflows/coleta.yml` roda `python -m collectors.executar` a cada
+hora (cron `7 * * * *`) e manualmente pelo botão **Run workflow**. Cada fonte roda
+isolada; o estado (`status`, `ultima_verificacao`, `ultimo_erro`, `ultima_coleta`) é
+gravado em `public.fontes`. Fontes ainda "CONFIRMAR" ficam como
+`pendente_confirmacao` e não derrubam o job. Só as leituras da ANA são gravadas em
+`leituras` (quando o endpoint for confirmado); as demais fontes por ora apenas
+têm a saúde registrada.
+
+Secrets necessários (GitHub → Settings → Secrets and variables → Actions):
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (chave secret/service_role, **só** aqui) e,
+opcionalmente, `ANA_API_TOKEN`. O job falha se nada puder ser registrado no Supabase.
+Teste local: defina as variáveis no `.env` e rode `python -m collectors.executar`.
