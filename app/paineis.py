@@ -25,7 +25,18 @@ from core.alertas import (
     listar_alertas,
     marcar_enviado,
 )
+from core.indicador import calcular_indicador, ler_alertas_emitidos
 from core.indice import COMPONENTES, ler_indices, validar_pesos
+from core.relatorios import gerar_csv, gerar_pdf
+
+EIXOS = {
+    "prevencao": "Prevenção",
+    "mitigacao": "Mitigação",
+    "preparacao": "Preparação",
+    "resposta": "Resposta",
+    "recuperacao": "Recuperação",
+}
+STATUS_ACAO = ["pendente", "em_andamento", "concluida"]
 
 PERFIS_GESTAO = {
     "gestor_nacional",
@@ -166,6 +177,45 @@ def renderizar_gestor() -> None:
     linhas.sort(key=lambda linha: linha["Índice"] or -1, reverse=True)
     st.dataframe(linhas, hide_index=True, use_container_width=True)
     st.caption("Calhas não comparáveis sem geometria e vínculo hidrológico confirmados.")
+
+    colunas = ["Município", "Classe", "Índice", "Hora leitura (UTC)", "Fontes e horários"]
+    resumo_indicador: dict[str, Any] = {}
+    try:
+        resumo_indicador = calcular_indicador(ler_alertas_emitidos(cliente))
+        st.subheader("Indicador: tempo leitura → emissão do alerta")
+        media = resumo_indicador["media_minutos"]
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Média (min)", "sem dados" if media is None else f"{media:.1f}")
+        c2.metric("Meta (min)", f"{resumo_indicador['meta_minutos']:.0f}")
+        c3.metric("Alertas medidos", resumo_indicador["alertas_medidos"])
+        st.caption(
+            "Linha de base do projeto: 30 min; meta: 10 min. Só entram alertas emitidos "
+            "com horário de leitura verificável; a meta é hipótese sem validação oficial."
+        )
+    except Exception as erro:
+        st.warning(f"Indicador indisponível: {erro}")
+
+    st.subheader("Exportar relatório")
+    st.download_button(
+        "Baixar CSV",
+        gerar_csv(linhas, colunas),
+        file_name="ranking_municipios.csv",
+        mime="text/csv",
+    )
+    try:
+        st.download_button(
+            "Baixar PDF",
+            gerar_pdf(
+                "Ranking de municípios — Centro de Inteligência da Defesa Civil",
+                linhas,
+                colunas[:4],
+                resumo=resumo_indicador or None,
+            ),
+            file_name="ranking_municipios.pdf",
+            mime="application/pdf",
+        )
+    except Exception as erro:
+        st.warning(f"PDF indisponível: {erro}")
 
 
 def renderizar_alertas() -> None:
@@ -310,8 +360,97 @@ def renderizar_coordenador() -> None:
                 }[tabela]
             )
             st.dataframe(resultado.data or [], hide_index=True, use_container_width=True)
+        _renderizar_acoes(cliente, municipio_id)
     except Exception as erro:
         st.error(f"Não foi possível carregar a gestão municipal: {erro}")
+
+
+def _renderizar_acoes(cliente: Any, municipio_id: str) -> None:
+    """Tarefas por eixo do PN-PDC, vinculadas a alertas do município."""
+    st.subheader("Tarefas por eixo")
+    alertas = (
+        cliente.table("alertas")
+        .select("id,classe,criado_em,status")
+        .eq("municipio_id", municipio_id)
+        .order("criado_em", desc=True)
+        .limit(50)
+        .execute()
+        .data
+        or []
+    )
+    if not alertas:
+        st.info("Sem alertas neste município; as tarefas são vinculadas a um alerta.")
+        return
+    ids = [alerta["id"] for alerta in alertas]
+    acoes = (
+        cliente.table("acoes")
+        .select("id,alerta_id,eixo,descricao,prazo,status")
+        .in_("alerta_id", ids)
+        .order("prazo")
+        .limit(500)
+        .execute()
+        .data
+        or []
+    )
+    for codigo, rotulo in EIXOS.items():
+        do_eixo = [acao for acao in acoes if acao["eixo"] == codigo]
+        with st.expander(f"{rotulo} ({len(do_eixo)})"):
+            if do_eixo:
+                st.dataframe(
+                    [
+                        {
+                            "Descrição": a["descricao"],
+                            "Prazo": a["prazo"],
+                            "Status": a["status"],
+                        }
+                        for a in do_eixo
+                    ],
+                    hide_index=True,
+                    use_container_width=True,
+                )
+            else:
+                st.caption("Nenhuma tarefa neste eixo.")
+    por_id = {alerta["id"]: alerta for alerta in alertas}
+    with st.form("nova-acao"):
+        alerta_id = st.selectbox(
+            "Alerta de origem",
+            ids,
+            format_func=lambda i: f"{por_id[i]['classe']} · {str(por_id[i]['criado_em'])[:16]} · {por_id[i]['status']}",
+        )
+        eixo = st.selectbox("Eixo", list(EIXOS), format_func=lambda c: EIXOS[c])
+        descricao = st.text_input("Descrição da tarefa", max_chars=300).strip()
+        criar = st.form_submit_button("Criar tarefa")
+    if criar:
+        if not descricao:
+            st.error("Informe a descrição da tarefa.")
+        else:
+            inserida = (
+                cliente.table("acoes")
+                .insert({"alerta_id": alerta_id, "eixo": eixo, "descricao": descricao})
+                .execute()
+            )
+            if not inserida.data:
+                raise RuntimeError("Tarefa não criada; verifique as permissões.")
+            st.success("Tarefa criada.")
+            st.rerun()
+    if acoes:
+        por_acao = {a["id"]: a for a in acoes}
+        with st.form("atualizar-acao"):
+            acao_id = st.selectbox(
+                "Atualizar tarefa",
+                list(por_acao),
+                format_func=lambda i: f"{EIXOS[por_acao[i]['eixo']]} · {por_acao[i]['descricao'][:50]}",
+            )
+            novo = st.selectbox("Novo status", STATUS_ACAO)
+            salvar = st.form_submit_button("Salvar status")
+        if salvar:
+            alterada = (
+                cliente.table("acoes").update({"status": novo}).eq("id", acao_id).execute()
+            )
+            if not alterada.data:
+                raise RuntimeError("Tarefa não alterada; verifique as permissões.")
+            st.success("Status atualizado.")
+            st.rerun()
 
 
 def renderizar_monitoramento() -> None:

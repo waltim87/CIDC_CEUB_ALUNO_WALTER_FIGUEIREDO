@@ -237,3 +237,23 @@ manual de consentimento e controle, e só então podem receber alertas. O
 formulário de campo registra contagens e necessidades, mas ainda não captura
 fotos/localização nem oferece gravação offline. Esses fluxos exigem validação
 operacional antes de uso em campo.
+
+## Fase 5 — eixos, relatórios, API pública e indicador
+
+- **Tarefas por eixo** (prevenção, mitigação, preparação, resposta, recuperação):
+  em *Gestão municipal*, vinculadas a um alerta do município (tabela `acoes`, com RLS).
+- **Relatórios**: em *Visão estadual/nacional*, botões para baixar o ranking em CSV
+  (UTF-8, `;`, protegido contra injeção de fórmulas) e PDF (`core/relatorios.py`).
+- **Indicador de resultado** (`core/indicador.py`): média de `emitido_em − data_hora_leitura`
+  dos alertas emitidos. Linha de base 30 min, meta 10 min (hipótese, sem validação oficial).
+  Só entram alertas com leitura de referência verificável; sem dados, mostra "sem dados".
+- **API pública somente leitura** (FastAPI, chave anon; o RLS limita a resposta):
+
+```powershell
+python -m uvicorn api.main:app --port 8010
+# http://localhost:8010/docs  ·  /saude  /municipios?uf=AM  /alertas  /indicador
+```
+
+- Migration `202610060001_indicador_publico.sql`: função que expõe apenas horários de
+  alertas já enviados, sem abrir a tabela `indices` ao público. Aplicar no SQL Editor.
+- Dependências novas: `fpdf2`, `fastapi`, `uvicorn` (`pip install -r requirements.txt`).
