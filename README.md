@@ -214,7 +214,9 @@ Verificação local da Fase 4:
 python -m unittest discover -s tests -v
 ```
 
-O teste simula os transportes e não envia e-mail/Telegram real. A migration RLS
+Os testes unitários simulam os transportes. O envio real por **Telegram** foi
+validado manualmente (alerta aprovado, enviado pelo painel e recebido no chat);
+o envio por e-mail (SMTP) ainda não foi testado. A migration RLS
 precisa também ser verificada no Supabase com contas de perfis distintos: usuário
 municipal não deve ler ou alterar outro município, perfil sem associação deve
 ser negado, dados públicos devem limitar-se a municípios, situação e alertas
