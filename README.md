@@ -219,7 +219,13 @@ precisa também ser verificada no Supabase com contas de perfis distintos: usuá
 municipal não deve ler ou alterar outro município, perfil sem associação deve
 ser negado, dados públicos devem limitar-se a municípios, situação e alertas
 emitidos, e só administradores devem gerenciar perfis/regras/pesos.
-O acesso remoto ao banco não foi testado nesta fase.
+
+Teste de isolamento RLS: cole [db/testes/rls_isolamento.sql](db/testes/rls_isolamento.sql)
+no SQL Editor do Supabase e execute. Ele cria usuários fictícios, verifica
+isolamento entre municípios, negação ao pesquisador e acesso anônimo restrito,
+e termina com um erro proposital (`RELATORIO ...`) que reverte tudo. Resultado
+verificado: 8 de 8 verificações OK. Não cobre ainda alertas, abrigos,
+pessoas afetadas, assinaturas nem o escopo estadual.
 
 Limitações ainda abertas: a página pública não cadastra assinaturas diretamente;
 contatos são registrados pela coordenação, permanecem inativos até verificação
