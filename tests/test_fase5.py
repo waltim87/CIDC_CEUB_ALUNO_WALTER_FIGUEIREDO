@@ -114,5 +114,73 @@ class SituacaoMunicipalTest(unittest.TestCase):
         self.assertEqual(resumo["Municípios — Sem índice"], 3)
 
 
+class RelatorioDetalhadoTest(unittest.TestCase):
+    def test_detalhes_agregados_por_municipio(self):
+        from core.relatorios import (
+            COLUNAS_DETALHADAS, detalhar_situacao, gerar_csv, gerar_pdf,
+            montar_situacao_municipal, totais_detalhados, COLUNAS_PDF_DETALHADO,
+        )
+
+        municipios = {"1": {"nome": "Alfa", "uf": "AM"}, "2": {"nome": "Beta", "uf": "AM"}}
+        indices = [{"municipio_id": "1", "classe": "Alto", "score_total": 70,
+                    "score_hidrologia": 80, "score_populacao": 40}]
+        alertas = [{"id": "a1", "municipio_id": "1", "classe": "Alto", "status": "enviado"}]
+        dados = {
+            "municipios": [{"id_ibge": "1", "calha": "Purus", "populacao": 1000}],
+            "comunidades": [{"id": "c1", "municipio_id": "1", "populacao_estimada": 300}],
+            "estacoes": [{"id": "e1", "municipio_id": "1"}],
+            "leituras": [{"estacao_id": "e1", "data_hora_leitura": "2026-10-01", "nivel_cm": 900, "chuva_mm": 2}],
+            "infra": [{"tipo": "ubs", "municipio_id": "1"}, {"tipo": "porto", "municipio_id": "1"}],
+            "abrigos": [{"municipio_id": "1", "capacidade": 100, "ocupacao": 25}],
+            "recursos": [{"municipio_id": "1", "tipo": "agua", "quantidade": 50}],
+            "afetados": [{"comunidade_id": "c1", "familias": 5, "pessoas": 20}],
+            "acoes": [{"alerta_id": "a1", "status": "pendente"}, {"alerta_id": "a1", "status": "concluida"}],
+            "situacao": [{"municipio_id": "1", "data": "2026-10-01", "situacao": "alerta"}],
+            "focos": [{"municipio_id": "1"}],
+        }
+        base = montar_situacao_municipal(municipios, indices, alertas)
+        linhas = detalhar_situacao(base, indices, alertas, dados)
+        alfa = next(l for l in linhas if l["Município"] == "Alfa")
+        beta = next(l for l in linhas if l["Município"] == "Beta")
+        self.assertEqual(alfa["População"], 1000)
+        self.assertEqual(alfa["Maior componente"], "Hidrologia")
+        self.assertEqual(alfa["Pessoas afetadas"], 20)
+        self.assertEqual(alfa["Nível último (cm)"], 900)
+        self.assertEqual(alfa["Unidades de saúde"], 1)
+        self.assertEqual(alfa["Outra infraestrutura"], 1)
+        self.assertEqual(alfa["Ocupação (%)"], 25.0)
+        self.assertEqual(alfa["Água"], 50)
+        self.assertEqual(alfa["Tarefas pendentes"], 1)
+        self.assertEqual(alfa["Tarefas concluídas"], 1)
+        self.assertEqual(alfa["Situação oficial"], "alerta")
+        self.assertEqual(beta["Situação oficial"], "Não informada")
+        self.assertEqual(beta["Comunidades"], 0)
+        self.assertIsNone(beta["Ocupação (%)"])
+        self.assertEqual(totais_detalhados(linhas)["Pessoas afetadas registradas"], 20)
+        self.assertTrue(gerar_csv(linhas, COLUNAS_DETALHADAS).startswith(b"\xef\xbb\xbf"))
+        self.assertTrue(gerar_pdf("T", linhas, COLUNAS_PDF_DETALHADO, resumo=totais_detalhados(linhas)).startswith(b"%PDF"))
+
+    def test_carregamento_isola_falha_de_tabela(self):
+        from core.relatorios import carregar_dados_relatorio
+
+        class Cliente:
+            def table(self, nome):
+                if nome == "focos_calor":
+                    raise RuntimeError("sem permissão")
+                return self
+
+            def select(self, *_): return self
+            def order(self, *_, **__): return self
+            def limit(self, *_): return self
+            def execute(self):
+                class R: data = [{"x": 1}]
+                return R()
+
+        dados, avisos = carregar_dados_relatorio(Cliente())
+        self.assertEqual(dados["focos"], [])
+        self.assertEqual(len(avisos), 1)
+        self.assertEqual(dados["abrigos"], [{"x": 1}])
+
+
 if __name__ == "__main__":
     unittest.main()

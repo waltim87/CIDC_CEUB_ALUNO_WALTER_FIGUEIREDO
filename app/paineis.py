@@ -28,12 +28,16 @@ from core.alertas import (
 from core.indicador import calcular_indicador, ler_alertas_emitidos
 from core.indice import COMPONENTES, ler_indices, validar_pesos
 from core.relatorios import (
-    COLUNAS_SITUACAO,
+    COLUNAS_DETALHADAS,
+    COLUNAS_PDF_DETALHADO,
     SEM_INDICE,
+    carregar_dados_relatorio,
+    detalhar_situacao,
     gerar_csv,
     gerar_pdf,
     montar_situacao_municipal,
     resumo_por_classe,
+    totais_detalhados,
 )
 
 EIXOS = {
@@ -167,7 +171,7 @@ def renderizar_gestor() -> None:
         indices = ler_indices(cliente, limite=5000)
         alertas = (
             cliente.table("alertas")
-            .select("municipio_id,classe,status,criado_em")
+            .select("id,municipio_id,classe,status,criado_em")
             .order("criado_em", desc=True)
             .limit(2000)
             .execute()
@@ -182,8 +186,17 @@ def renderizar_gestor() -> None:
     uf = st.selectbox("UF", ["Todas", *ufs])
     if uf != "Todas":
         municipios = {c: m for c, m in municipios.items() if m.get("uf") == uf}
-    linhas = montar_situacao_municipal(municipios, indices, alertas)
+    dados, avisos_dados = carregar_dados_relatorio(cliente)
+    for aviso in avisos_dados:
+        st.warning(f"Fonte de dados indisponível no relatório — {aviso}")
+    linhas = detalhar_situacao(
+        montar_situacao_municipal(municipios, indices, alertas),
+        indices,
+        alertas,
+        dados,
+    )
     resumo = resumo_por_classe(linhas)
+    totais = totais_detalhados(linhas)
 
     st.subheader("Resumo por classe")
     colunas_resumo = st.columns(min(len(resumo), 4))
@@ -197,8 +210,35 @@ def renderizar_gestor() -> None:
             f'"{SEM_INDICE}" até o motor gerar índices verificáveis.'
         )
 
+    st.subheader("Totais do recorte")
+    colunas_totais = st.columns(4)
+    for posicao, (rotulo, valor) in enumerate(totais.items()):
+        colunas_totais[posicao % 4].metric(rotulo, "n/d" if valor is None else valor)
+    st.caption(
+        "Totais somam apenas o que está cadastrado na plataforma; zero pode "
+        "significar ausência de cadastro, não ausência de risco."
+    )
+
     st.subheader("Situação por município")
-    st.dataframe(linhas, hide_index=True, use_container_width=True)
+    visao = st.radio("Visão", ["Resumida", "Completa"], horizontal=True)
+    colunas_tabela = COLUNAS_PDF_DETALHADO if visao == "Resumida" else COLUNAS_DETALHADAS
+    st.dataframe(
+        [{c: linha.get(c) for c in colunas_tabela} for linha in linhas],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.subheader("Detalhe de um município")
+    escolhido = st.selectbox(
+        "Município", [linha["Município"] for linha in linhas], key="detalhe_municipio"
+    )
+    linha_escolhida = next(l for l in linhas if l["Município"] == escolhido)
+    st.table(
+        [
+            {"Campo": c, "Valor": "" if linha_escolhida.get(c) is None else str(linha_escolhida[c])}
+            for c in COLUNAS_DETALHADAS
+        ]
+    )
     st.caption("Calhas não comparáveis sem geometria e vínculo hidrológico confirmados.")
 
     resumo_indicador: dict[str, Any] = {}
@@ -221,12 +261,12 @@ def renderizar_gestor() -> None:
     sufixo = "" if uf == "Todas" else f"_{uf}"
     st.download_button(
         "Baixar CSV",
-        gerar_csv(linhas, COLUNAS_SITUACAO),
+        gerar_csv(linhas, COLUNAS_DETALHADAS),
         file_name=f"situacao_municipios{sufixo}.csv",
         mime="text/csv",
     )
     try:
-        resumo_pdf = {**resumo}
+        resumo_pdf = {**resumo, **totais}
         if resumo_indicador:
             media = resumo_indicador["media_minutos"]
             resumo_pdf["Indicador leitura-emissao (min, média)"] = media

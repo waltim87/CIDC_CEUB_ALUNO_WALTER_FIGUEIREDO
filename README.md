@@ -257,3 +257,7 @@ python -m uvicorn api.main:app --port 8010
 - Migration `202610060001_indicador_publico.sql`: função que expõe apenas horários de
   alertas já enviados, sem abrir a tabela `indices` ao público. Aplicar no SQL Editor.
 - Dependências novas: `fpdf2`, `fastapi`, `uvicorn` (`pip install -r requirements.txt`).
+
+### Relatório da visão nacional/estadual
+
+Uma linha por município (CSV com 46 colunas, PDF com 11): população, calha, índice e componentes, situação oficial, alertas, comunidades, afetados, estações e última leitura, focos de calor, unidades de saúde e escolas, abrigos e ocupação, estoques, tarefas por eixo. Totais somam só o que está cadastrado; zero pode ser ausência de cadastro. Cada tabela é lida de forma isolada: se uma falhar, o relatório avisa e segue.
