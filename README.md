@@ -275,3 +275,10 @@ Secrets necessários (GitHub → Settings → Secrets and variables → Actions)
 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (chave secret/service_role, **só** aqui) e,
 opcionalmente, `ANA_API_TOKEN`. O job falha se nada puder ser registrado no Supabase.
 Teste local: defina as variáveis no `.env` e rode `python -m collectors.executar`.
+
+### Privilégios do coletor (service_role)
+
+Se a coleta falhar com `permission denied for table fontes` (código 42501),
+execute no SQL Editor do Supabase
+`db/migrations/202610060002_grants_service_role.sql`, que concede à role
+`service_role` os privilégios de tabela necessários.
