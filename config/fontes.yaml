@@ -1,0 +1,31 @@
+ana:
+  nome: ANA HidroWebService
+  tipo: hidrologia
+  periodicidade_min: 60
+  status: CONFIRMAR
+  endpoint: CONFIRMAR
+  documentacao_oficial: https://www.gov.br/ana/pt-br/assuntos/monitoramento-e-eventos-criticos/monitoramento-hidrologico/orientacoes-manuais/manuais-de-sistemas-e-servicos-de-disponibilizacao-de-dados-hidrologicos
+  autenticacao:
+    tipo: CONFIRMAR
+    variavel_ambiente: ANA_API_TOKEN
+    nome_cabecalho: CONFIRMAR
+    prefixo: CONFIRMAR
+  parametros: CONFIRMAR
+  resposta:
+    caminho_registros: CONFIRMAR
+    campos:
+      data_hora_leitura: CONFIRMAR
+      nivel_cm: CONFIRMAR
+      vazao: CONFIRMAR
+      chuva_mm: CONFIRMAR
+      tendencia: CONFIRMAR
+  estacoes:
+    - nome: "CONFIRMAR - estação piloto do Purus em Lábrea/AM"
+      codigo_oficial: CONFIRMAR
+      municipio_id_ibge: "1302405"
+    - nome: "CONFIRMAR - estação piloto do Purus em Beruri/AM"
+      codigo_oficial: CONFIRMAR
+      municipio_id_ibge: "1300631"
+    - nome: "CONFIRMAR - estação piloto do Purus em Boca do Acre/AM"
+      codigo_oficial: CONFIRMAR
+      municipio_id_ibge: "1300706"

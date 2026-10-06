@@ -1,2 +1,85 @@
-# CIDC_CEUB_ALUNO_WALTER_FIGUEIREDO
-Centro de Inteligência da Defesa Civil - Plataforma Integrada de Triagem e Resiliência (protótipo).
+# Centro de Inteligência da Defesa Civil
+
+Plataforma Integrada de Triagem e Resiliência — protótipo do desafio PN-PDC
+2025–2035.
+
+> **Protótipo, sem validação oficial; confirme nos órgãos oficiais.**
+
+## Fase 1 — banco inicial e coletor ANA
+
+### Contas e segredos
+
+- GitHub: repositório público do projeto.
+- Supabase: projeto no plano Free, região South America (São Paulo).
+- A ANA HidroWebService pode exigir cadastro e credenciais. Confirme o acesso,
+  o endpoint, o método de autenticação e os campos no manual oficial antes de
+  ativar o coletor. Consulte `config/fontes.yaml`; valores ainda não confirmados
+  estão marcados como `CONFIRMAR`.
+- Nunca publique `SUPABASE_SERVICE_ROLE_KEY`, a senha do banco ou credenciais ANA.
+  Copie `.env.example` para `.env` e preencha os valores apenas localmente. `.env`
+  é ignorado pelo Git.
+
+### Preparar o ambiente local (Windows / PowerShell)
+
+```powershell
+Set-Location 'C:\Users\walte\source\CIDC_CEUB_ALUNO_WALTER_FIGUEIREDO'
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Preencha `.env` com o Project URL e a chave `service_role` disponíveis nas
+configurações do projeto Supabase. Não use a chave `anon` para a gravação pelo
+coletor. Não envie esses valores por chat.
+
+### Criar tabelas e dados de referência
+
+No painel do Supabase, abra **SQL Editor** e execute, na ordem:
+
+1. `db/migrations/202610050001_schema_inicial.sql`
+2. `db/seeds/202610050001_amazonas.sql`
+
+A migration habilita PostGIS, cria o esquema e liga RLS em todas as tabelas.
+Até a Fase 4, não existem políticas para usuários autenticados; o acesso de
+gravação pelo coletor usa a chave `service_role` local, que ignora RLS. O seed
+inclui os 62 municípios do Amazonas identificados pelo IBGE. As três linhas de
+estação do Purus são **marcadores pendentes**, com código oficial nulo; não são
+estações reais confirmadas e não geram leituras.
+
+### Ativar a coleta ANA depois da confirmação oficial
+
+1. Consulte o manual/API no endereço oficial registrado em `fontes.yaml` e
+   solicite acesso à ANA pelos canais ali indicados.
+2. Confirme de 3 a 5 estações da bacia do Purus no sistema oficial Hidro-Telemetria.
+3. Atualize no YAML endpoint, autenticação, parâmetros, caminho/campos da resposta,
+   códigos oficiais, nomes e municípios. Troque `status: CONFIRMAR` por
+   `status: ativo` somente após validar tudo.
+4. Coloque as credenciais exigidas em `.env` e execute:
+
+```powershell
+python -m collectors.ana
+```
+
+O coletor preserva `data_hora_leitura` da fonte, grava `coletado_em` em UTC e
+faz upsert por estação e instante. Erros de uma estação são registrados sem
+interromper as demais. A coleta e a gravação ficam bloqueadas enquanto os dados
+oficiais estiverem pendentes.
+
+### Testes da Fase 1
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Os testes usam respostas simuladas e não fazem chamadas à ANA ou ao Supabase.
+Validação manual do banco: depois de executar migration e seed no SQL Editor,
+confira que há 62 linhas em `municipios`, 3 marcadores sem `codigo_oficial` em
+`estacoes` e nenhuma linha de leitura fictícia em `leituras`.
+
+## Escopo ainda não ativado
+
+Esta entrega não insere leituras reais: os manuais, credenciais de acesso à ANA
+e identificação oficial das estações precisam ser confirmados. A integração não
+inventa endpoint, formato de resposta, códigos ou valores. Os demais coletores,
+índice, painéis, perfis, notificações e API pública pertencem às fases seguintes.
