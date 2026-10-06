@@ -361,6 +361,53 @@ begin
          case when n >= 1 then 'OK' else 'FALHA' end);
   reset role;
 
+  ---------------------------------------------------------------- Tarefas por eixo (acoes)
+  perform pg_temp.entrar(u_a, 'authenticated');
+  falhou := true;
+  begin
+    insert into public.acoes (alerta_id, eixo, descricao) values (al_env_a, 'resposta', 'Tarefa A');
+    falhou := false;
+  exception when others then falhou := true;
+  end;
+  r := r || '45) Coord A criou tarefa em alerta do proprio municipio -> ' || case when not falhou then 'OK' else 'FALHA' end || E'\n';
+
+  falhou := true;
+  begin
+    insert into public.acoes (alerta_id, eixo, descricao) values (al_rasc_b, 'resposta', 'Invasao');
+  exception when others then falhou := false;
+  end;
+  r := r || '46) Coord A criar tarefa em alerta de outro municipio bloqueado -> ' || case when not falhou then 'OK' else 'FALHA' end || E'\n';
+
+  falhou := true;
+  begin
+    insert into public.acoes (alerta_id, eixo, descricao) values (al_env_a, 'inexistente', 'Eixo invalido');
+  exception when others then falhou := false;
+  end;
+  r := r || '47) Coord A eixo invalido bloqueado -> ' || case when not falhou then 'OK' else 'FALHA' end || E'\n';
+
+  update public.acoes set status = 'em_andamento' where descricao = 'Tarefa A';
+  get diagnostics n = row_count;
+  r := r || format('48) Coord A atualizou %s tarefa propria (esperado 1) -> %s' || E'\n', n,
+         case when n = 1 then 'OK' else 'FALHA' end);
+  reset role;
+
+  perform pg_temp.entrar(u_b, 'authenticated');
+  select count(*) into n from public.acoes where descricao = 'Tarefa A';
+  r := r || format('49) Coord B ve %s tarefas de outro municipio (esperado 0) -> %s' || E'\n', n,
+         case when n = 0 then 'OK' else 'FALHA' end);
+  update public.acoes set status = 'concluida' where descricao = 'Tarefa A';
+  get diagnostics n = row_count;
+  r := r || format('50) Coord B alterou %s tarefas de outro municipio (esperado 0) -> %s' || E'\n', n,
+         case when n = 0 then 'OK' else 'FALHA' end);
+  reset role;
+
+  perform pg_temp.entrar(null, 'anon');
+  n := 0;
+  begin select count(*) into n from public.acoes; exception when insufficient_privilege then n := 0; end;
+  r := r || format('51) Anonimo ve %s tarefas (esperado 0) -> %s' || E'\n', n,
+         case when n = 0 then 'OK' else 'FALHA' end);
+  reset role;
+
   raise exception using message = E'RELATORIO (nada foi gravado)\n' || r;
 end
 $teste$;

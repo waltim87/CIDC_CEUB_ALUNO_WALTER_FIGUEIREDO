@@ -1,4 +1,4 @@
-# Centro de Inteligência da Defesa Civil
+﻿# Centro de Inteligência da Defesa Civil
 
 Plataforma Integrada de Triagem e Resiliência — protótipo do desafio PN-PDC
 2025–2035.
@@ -226,7 +226,7 @@ Teste de isolamento RLS: cole [db/testes/rls_isolamento.sql](db/testes/rls_isola
 no SQL Editor do Supabase e execute. Ele cria usuários fictícios, verifica
 isolamento entre municípios, negação ao pesquisador e acesso anônimo restrito,
 e termina com um erro proposital (`RELATORIO ...`) que reverte tudo. Resultado
-verificado: 44 de 44 verificações OK (recursos, alertas e suas transições,
+verificado: 51 de 51 verificações OK (tarefas por eixo, recursos, alertas e suas transições,
 abrigos, afetados, assinaturas, entregas, escopo estadual por UF, perfis de
 campo/operador/pesquisador/administrador e acesso anônimo). Os dois testes
 de escopo estadual usam um município fictício de outra UF, desfeito no rollback.
