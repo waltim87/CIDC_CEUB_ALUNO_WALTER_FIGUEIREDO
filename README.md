@@ -224,8 +224,10 @@ Teste de isolamento RLS: cole [db/testes/rls_isolamento.sql](db/testes/rls_isola
 no SQL Editor do Supabase e execute. Ele cria usuários fictícios, verifica
 isolamento entre municípios, negação ao pesquisador e acesso anônimo restrito,
 e termina com um erro proposital (`RELATORIO ...`) que reverte tudo. Resultado
-verificado: 8 de 8 verificações OK. Não cobre ainda alertas, abrigos,
-pessoas afetadas, assinaturas nem o escopo estadual.
+verificado: 44 de 44 verificações OK (recursos, alertas e suas transições,
+abrigos, afetados, assinaturas, entregas, escopo estadual por UF, perfis de
+campo/operador/pesquisador/administrador e acesso anônimo). Os dois testes
+de escopo estadual usam um município fictício de outra UF, desfeito no rollback.
 
 Limitações ainda abertas: a página pública não cadastra assinaturas diretamente;
 contatos são registrados pela coordenação, permanecem inativos até verificação
