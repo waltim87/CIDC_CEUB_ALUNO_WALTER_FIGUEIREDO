@@ -386,3 +386,15 @@ modelo de texto fixo.
   envio automático dos alertas APROVADOS no painel. Exige o secret `TELEGRAM_BOT_TOKEN`
   no GitHub. Não há base aberta legítima de telefones/Telegram de pessoas: o envio é só
   para quem se inscreve (LGPD).
+
+## Etapa 12 — meteorologia
+
+- `python -m collectors.inmet` (a cada 3 h): **avisos meteorológicos oficiais do INMET**
+  (apiprevmet3, sem chave) por município do AM, **previsão do INMET** por município (5 dias:
+  tempo, temperaturas, umidade, vento) e **chuva prevista em mm** do Open-Meteo (modelo
+  numérico gratuito; uma consulta para os 62 municípios). Chuva observada: pluviômetros ANA.
+- O robô eleva o sinal com aviso INMET (Perigo Potencial → Atenção, Perigo → Alerta, Grande
+  Perigo → Alto) e com chuva prevista ≥ 50/100 mm/dia (`config/robo.yaml`); municípios sem
+  estação, mas com aviso, também são analisados; a IA prioriza os de maior risco.
+- Tela **Meteorologia** (avisos com cores oficiais, mapa, previsão, chuva prevista/observada,
+  relatório) e aviso + previsão na página pública. Migration `202610140008`.

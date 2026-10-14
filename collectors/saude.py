@@ -10,7 +10,6 @@ from collectors.ana import coletar as coletar_ana
 from collectors.cemaden import coletar as coletar_cemaden
 from collectors.ibge import coletar as coletar_ibge
 from collectors.inep import coletar as coletar_inep
-from collectors.inmet import coletar as coletar_inmet
 from collectors.inpe import coletar as coletar_inpe
 from collectors.sgb import coletar as coletar_sgb
 from collectors.comum import ConfiguracaoPendenteError, carregar_configuracao
@@ -20,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 COLETORES: dict[str, Callable[..., list[dict[str, Any]]]] = {
     "ana": coletar_ana,
     "inpe": coletar_inpe,
-    "inmet": coletar_inmet,
+    # "inmet": coletado por python -m collectors.inmet (avisos/previsão; registra a própria saúde).
     "sgb": coletar_sgb,
     "cemaden": coletar_cemaden,
     "ibge": coletar_ibge,

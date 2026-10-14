@@ -42,6 +42,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m collectors.cnes
+      - name: Meteorologia (avisos e previsao INMET, chuva prevista Open-Meteo)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m collectors.inmet
       - name: Calcular indice e gerar rascunhos de alerta
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

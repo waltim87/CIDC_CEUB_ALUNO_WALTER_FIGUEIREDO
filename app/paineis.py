@@ -1316,6 +1316,9 @@ def renderizar_publico() -> None:
             st.markdown(f"### {alerta['classe']} · {alerta['criado_em']}")
             st.write(alerta["texto"])
             st.caption(f"Emitido em: {alerta.get('emitido_em') or 'ainda não emitido'}")
+        from app.meteorologia import secao_publica
+
+        secao_publica(cliente, municipio_id)
         relatos_publicos(cliente, {c: m["nome"] for c, m in municipios.items()})
         convite_telegram()
         painel_relatorio(

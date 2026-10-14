@@ -44,3 +44,15 @@ ia:
   max_chamadas_por_execucao: 40
   intervalo_segundos: 4
   timeout_segundos: 30
+
+# Meteorologia (collectors/inmet.py). Aviso oficial do INMET eleva o sinal do município
+# conforme a severidade; chuva prevista (Open-Meteo, modelo) é hipótese de apoio.
+meteorologia:
+  severidade_inmet:
+    "Perigo Potencial": atencao
+    "Perigo": alerta
+    "Grande Perigo": alto
+  chuva_prevista_dia_mm:
+    atencao: 50
+    alerta: 100
+  dias_previsao: 3

@@ -216,6 +216,46 @@ def consolidar_municipio(
     }
 
 
+def aplicar_meteorologia(
+    resultado: dict[str, Any], avisos: list[dict[str, Any]], chuva: list[dict[str, Any]], cfg: dict[str, Any]
+) -> dict[str, Any]:
+    """Avisos oficiais do INMET e chuva prevista elevam o sinal e entram nos fatores."""
+    regras = cfg.get("meteorologia") or {}
+    severidades = regras.get("severidade_inmet") or {}
+    resultado["avisos"] = [
+        {"descricao": a["descricao"], "severidade": a["severidade"], "fim": a.get("fim"),
+         "riscos": a.get("riscos")}
+        for a in avisos
+    ]
+    resultado["chuva_prevista"] = [
+        {"data": c["data"], "mm": float(c["chuva_prevista_mm"])}
+        for c in chuva if c.get("chuva_prevista_mm") is not None
+    ]
+    sinal = resultado["sinal"]
+    vistos = set()
+    for aviso in avisos:
+        efeito = severidades.get(aviso["severidade"])
+        if efeito:
+            sinal = _maior(sinal, efeito)
+        chave = (aviso["descricao"], aviso["severidade"])
+        if chave not in vistos:
+            vistos.add(chave)
+            resultado["fatores"].append(
+                f"INMET: aviso de {aviso['descricao']} ({aviso['severidade']}) até {_data_br(aviso.get('fim'))}"
+            )
+    limites = regras.get("chuva_prevista_dia_mm") or {}
+    maior_chuva = max((c["mm"] for c in resultado["chuva_prevista"]), default=None)
+    if maior_chuva is not None and limites:
+        if maior_chuva >= limites.get("alerta", float("inf")):
+            sinal = _maior(sinal, "alerta")
+        elif maior_chuva >= limites.get("atencao", float("inf")):
+            sinal = _maior(sinal, "atencao")
+        if maior_chuva >= limites.get("atencao", float("inf")):
+            resultado["fatores"].append(f"chuva prevista de até {maior_chuva:g} mm em um dia (Open-Meteo)")
+    resultado["sinal"] = sinal
+    return resultado
+
+
 def texto_modelo_fixo(resultado: dict[str, Any]) -> str:
     """Texto determinístico, usado sem IA ou quando a IA falha."""
     partes = [
@@ -245,6 +285,21 @@ def texto_modelo_fixo(resultado: dict[str, Any]) -> str:
                 f"{_data_br(estacao['cheia_historica_data'])})"
             )
         partes.append(trecho + ".")
+    vistos = set()
+    for aviso in resultado.get("avisos") or []:
+        chave = (aviso["descricao"], aviso["severidade"])
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        partes.append(
+            f"INMET: aviso de {aviso['descricao']} ({aviso['severidade']}) até {_data_br(aviso.get('fim'))}."
+        )
+    chuva = [c for c in resultado.get("chuva_prevista") or [] if c["mm"] is not None]
+    if chuva:
+        partes.append(
+            "Chuva prevista (Open-Meteo): "
+            + ", ".join(f"{_data_br(c['data'])[:5]} {c['mm']:g} mm" for c in chuva) + "."
+        )
     if resultado.get("populacao"):
         partes.append(f"População do município: {resultado['populacao']} pessoas (IBGE 2022).")
     partes.append("Confirme nos órgãos oficiais antes de qualquer decisão.")
@@ -257,6 +312,13 @@ def fatos_para_ia(resultado: dict[str, Any]) -> dict[str, Any]:
         "populacao_ibge_2022": resultado.get("populacao"),
         "sinal": ROTULOS_SINAL[resultado["sinal"]],
         "motivos": resultado["fatores"],
+        "avisos_inmet": [
+            {"tipo": a["descricao"], "severidade": a["severidade"], "ate": _data_br(a.get("fim"))}
+            for a in resultado.get("avisos") or []
+        ],
+        "chuva_prevista_mm_por_dia": {
+            _data_br(c["data"])[:5]: c["mm"] for c in resultado.get("chuva_prevista") or []
+        },
         "estacoes": [
             {
                 "nome": e["estacao"],
@@ -337,6 +399,29 @@ def _criar_alerta_rascunho(
     return True
 
 
+def _buscar_meteorologia(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> tuple[dict, dict]:
+    """Avisos INMET vigentes e chuva prevista por município; vazio se as tabelas não existirem."""
+    avisos: dict[str, list] = {}
+    chuva: dict[str, list] = {}
+    try:
+        for aviso in (
+            cliente.table("avisos_meteorologicos").select("municipio_id,descricao,severidade,inicio,fim,riscos")
+            .gte("fim", agora.isoformat()).execute().data or []
+        ):
+            avisos.setdefault(str(aviso["municipio_id"]).strip(), []).append(aviso)
+        dias = (cfg.get("meteorologia") or {}).get("dias_previsao", 3)
+        limite = (agora + timedelta(days=dias)).date().isoformat()
+        for linha in (
+            cliente.table("previsao_tempo").select("municipio_id,data,chuva_prevista_mm")
+            .eq("periodo", "dia").gte("data", agora.date().isoformat()).lte("data", limite)
+            .order("data").execute().data or []
+        ):
+            chuva.setdefault(str(linha["municipio_id"]).strip(), []).append(linha)
+    except Exception:
+        LOGGER.warning("Meteorologia indisponível (aplique a migration 202610140008)", exc_info=True)
+    return avisos, chuva
+
+
 def _buscar_dados(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> tuple[list, dict, dict]:
     estacoes = _ler_estacoes(cliente)
     municipios = {
@@ -389,13 +474,23 @@ def executar_robo(
             por_municipio.setdefault(municipio_id, []).append(
                 analisar_estacao(estacao, leituras.get(estacao["id"], []), cfg, agora=agora)
             )
+    avisos, chuva = _buscar_meteorologia(cliente, agora, cfg)
+    for municipio_id in avisos:  # municípios sem estação, mas com aviso oficial do INMET
+        por_municipio.setdefault(municipio_id, [])
+
+    resultados = []
+    for municipio_id, analises in por_municipio.items():
+        municipio = municipios.get(municipio_id, {"id_ibge": municipio_id, "nome": municipio_id})
+        resultado = consolidar_municipio(municipio, analises)
+        aplicar_meteorologia(resultado, avisos.get(municipio_id, []), chuva.get(municipio_id, []), cfg)
+        resultados.append((municipio_id, analises, resultado))
+    # Maior risco primeiro: a cota gratuita de IA vai para os municípios mais críticos.
+    resultados.sort(key=lambda item: (-ORDEM_SINAIS.index(item[2]["sinal"]), item[0]))
 
     resumo = {"municipios": 0, "ia": 0, "modelo_fixo": 0, "alertas": 0, "erros": 0}
     chamadas_ia = 0
-    for municipio_id, analises in sorted(por_municipio.items()):
+    for municipio_id, analises, resultado in resultados:
         try:
-            municipio = municipios.get(municipio_id, {"id_ibge": municipio_id, "nome": municipio_id})
-            resultado = consolidar_municipio(municipio, analises)
             texto_fixo = texto_modelo_fixo(resultado)
             if chamadas_ia < cfg["ia"]["max_chamadas_por_execucao"]:
                 if chamadas_ia and os.environ.get(cfg["ia"]["variavel_chave"]):
@@ -425,6 +520,9 @@ def executar_robo(
                         {"nome": f"ANA estação {e['codigo']}", "data_hora_leitura": e["data_hora_leitura"]}
                         for e in analises
                         if e["data_hora_leitura"]
+                    ] + [
+                        {"nome": f"INMET aviso: {a['descricao']} ({a['severidade']})", "data_hora_leitura": a.get("fim")}
+                        for a in resultado.get("avisos") or []
                     ],
                     "data_hora_leitura_referencia": resultado["data_hora_leitura_referencia"],
                 }

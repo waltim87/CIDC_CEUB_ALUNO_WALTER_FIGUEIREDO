@@ -30,6 +30,7 @@ from app.paineis import (
     renderizar_monitoramento,
 )
 from app.voluntarios import renderizar_meu_cadastro, renderizar_relatos
+from app.meteorologia import renderizar_meteorologia
 
 st.set_page_config(page_title="CIDC | Defesa Civil", page_icon="🌧️", layout="wide")
 
@@ -76,6 +77,7 @@ else:
     leitor = nome_perfil == "voluntario"  # lê tudo, não aprova alertas nem edita cadastros
     if nome_perfil != "pesquisador":
         paginas.insert(1, st.Page(renderizar_relatos, title="Relatos de campo", icon="📢"))
+    paginas.insert(1, st.Page(renderizar_meteorologia, title="Meteorologia", icon="🌦️"))
     if leitor:
         paginas.insert(1, st.Page(renderizar_meu_cadastro, title="Meu cadastro", icon="🙋"))
     if nome_perfil in {"gestor_nacional", "gestor_estadual", "administrador"} or leitor:
