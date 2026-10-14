@@ -41,7 +41,7 @@ class TestAnaliseEstacao(unittest.TestCase):
         self.assertEqual(resultado["sinal"], "normal")
 
     def test_leitura_atrasada_vira_sem_dados_e_nao_normal(self) -> None:
-        resultado = analisar_estacao(ESTACAO, serie([(30, 900), (9, 901)]), CFG, agora=AGORA)
+        resultado = analisar_estacao(ESTACAO, serie([(30, 900), (13, 901)]), CFG, agora=AGORA)
         self.assertEqual(resultado["sinal"], "sem_dados")
 
     def test_sem_leituras(self) -> None:

@@ -6,7 +6,8 @@ validacao_oficial: false
 # Janela de leituras analisadas por estação.
 janela_horas: 48
 # Leitura de nível mais antiga que isto vira "sem_dados" (não é risco zero).
-idade_maxima_leitura_horas: 6
+# 12 h: algumas estações (ex.: Lábrea) transmitem o nível de forma irregular.
+idade_maxima_leitura_horas: 12
 # Mínimo de horas entre a primeira e a última leitura para estimar a variação.
 horas_minimas_para_tendencia: 6
 
