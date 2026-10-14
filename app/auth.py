@@ -141,7 +141,8 @@ def _logins_pendentes() -> dict[str, tuple[str, float]]:
     return {}
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+# Curto: ao ativar o Google no Supabase, o botão aparece em até 1 minuto.
+@st.cache_data(ttl=60, show_spinner=False)
 def google_habilitado(url: str, chave: str) -> bool:
     try:
         resposta = requests.get(f"{url}/auth/v1/settings", headers={"apikey": chave}, timeout=10)
