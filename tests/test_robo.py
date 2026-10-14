@@ -107,7 +107,10 @@ class TestLlm(unittest.TestCase):
 
     def test_sem_chave_usa_modelo_fixo(self) -> None:
         with mock.patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
-            self.assertEqual(llm.gerar_texto(self.FATOS, "fixo", modelo="m"), ("fixo", "modelo_fixo", None))
+            self.assertEqual(
+                llm.gerar_texto(self.FATOS, "fixo", modelo="m"),
+                ("fixo", "modelo_fixo", "fallback: GEMINI_API_KEY ausente"),
+            )
 
     def test_texto_inventado_da_ia_cai_no_modelo_fixo(self) -> None:
         with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "x"}):
@@ -115,6 +118,7 @@ class TestLlm(unittest.TestCase):
                 self.FATOS, "fixo", modelo="m", chamador=lambda *a, **k: "Subirá 999 cm."
             )
         self.assertEqual(resultado[1], "modelo_fixo")
+        self.assertIn("999", resultado[2])
 
     def test_falha_da_api_cai_no_modelo_fixo(self) -> None:
         def quebra(*_: Any, **__: Any) -> str:

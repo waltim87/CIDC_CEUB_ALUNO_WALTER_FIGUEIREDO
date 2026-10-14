@@ -43,9 +43,13 @@ def numeros_permitidos(fatos: Any) -> set[str]:
     return {_normalizar_numero(n) for n in _NUMERO.findall(json.dumps(fatos, ensure_ascii=False))}
 
 
-def texto_respeita_fatos(texto: str, fatos: Any) -> bool:
+def numeros_fora_dos_fatos(texto: str, fatos: Any) -> list[str]:
     permitidos = numeros_permitidos(fatos)
-    return all(_normalizar_numero(n) in permitidos for n in _NUMERO.findall(texto))
+    return [n for n in _NUMERO.findall(texto) if _normalizar_numero(n) not in permitidos]
+
+
+def texto_respeita_fatos(texto: str, fatos: Any) -> bool:
+    return not numeros_fora_dos_fatos(texto, fatos)
 
 
 def chamar_gemini(
@@ -84,16 +88,30 @@ def gerar_texto(
     timeout: int = 30,
     chamador: Callable[..., str] = chamar_gemini,
 ) -> tuple[str, str, str | None]:
-    """Retorna (texto, metodo, modelo). metodo é 'ia' ou 'modelo_fixo'."""
+    """Retorna (texto, metodo, modelo). metodo é 'ia' ou 'modelo_fixo'.
+
+    No modelo fixo, o terceiro item registra o motivo (ex.: "fallback: HTTP 404"),
+    para o diagnóstico aparecer no banco sem precisar abrir o log.
+    """
     chave = os.environ.get(variavel_chave, "").strip()
     if not chave:
-        return texto_fixo, "modelo_fixo", None
+        LOGGER.warning("%s não definida; usando modelo fixo", variavel_chave)
+        return texto_fixo, "modelo_fixo", f"fallback: {variavel_chave} ausente"
     try:
         texto = chamador(fatos, chave=chave, modelo=modelo, timeout=timeout)
     except Exception as erro:  # a falha da IA nunca interrompe o robô
-        LOGGER.warning("IA indisponível (%s); usando modelo fixo", type(erro).__name__)
-        return texto_fixo, "modelo_fixo", None
-    if not texto or not texto_respeita_fatos(texto, fatos):
-        LOGGER.warning("Texto da IA citou números fora dos fatos; usando modelo fixo")
-        return texto_fixo, "modelo_fixo", None
+        status = getattr(getattr(erro, "response", None), "status_code", None)
+        LOGGER.warning(
+            "IA indisponível (%s%s, modelo %s); usando modelo fixo",
+            type(erro).__name__, f" HTTP {status}" if status else "", modelo,
+        )
+        motivo = f"HTTP {status}" if status else type(erro).__name__
+        return texto_fixo, "modelo_fixo", f"fallback: {motivo} ({modelo})"
+    if not texto:
+        LOGGER.warning("IA devolveu texto vazio; usando modelo fixo")
+        return texto_fixo, "modelo_fixo", f"fallback: texto vazio ({modelo})"
+    fora = numeros_fora_dos_fatos(texto, fatos)
+    if fora:
+        LOGGER.warning("Texto da IA citou números fora dos fatos %s; usando modelo fixo", fora)
+        return texto_fixo, "modelo_fixo", f"fallback: números fora dos dados {fora[:5]} ({modelo})"
     return texto, "ia", modelo
