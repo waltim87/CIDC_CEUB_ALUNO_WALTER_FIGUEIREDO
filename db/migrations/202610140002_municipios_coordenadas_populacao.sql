@@ -4,6 +4,7 @@
 -- Sede municipal: base aberta kelvins/municipios-brasileiros (derivada do IBGE),
 --   https://github.com/kelvins/municipios-brasileiros — conferida com as
 --   coordenadas das estações ANA de Lábrea, Beruri e Boca do Acre.
+-- A coluna geom (MultiPolygon) fica reservada ao contorno oficial do município.
 
 alter table public.municipios
     add column if not exists latitude double precision,
@@ -14,7 +15,6 @@ alter table public.municipios
 update public.municipios m
 set latitude = v.lat,
     longitude = v.lon,
-    geom = extensions.st_setsrid(extensions.st_makepoint(v.lon, v.lat), 4326),
     populacao = v.pop,
     populacao_fonte = 'IBGE Censo 2022 (agregado 4709, var. 93)',
     coordenadas_fonte = 'Sede municipal — kelvins/municipios-brasileiros (derivada do IBGE)'
