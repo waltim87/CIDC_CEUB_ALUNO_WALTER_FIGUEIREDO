@@ -1,15 +1,17 @@
-"""Coletor da ANA HidroWebService.
+"""Coletor da ANA (Telemetria - ServiceANA.asmx/DadosHidrometeorologicos).
 
 Os detalhes de endpoint, autenticação e formato da resposta ficam em
 ``config/fontes.yaml``. O coletor se mantém desativado enquanto esses dados
-oficiais não forem confirmados.
+não forem confirmados. Suporta respostas JSON (caminhos configurados) e o XML
+público da telemetria da ANA (``formato: xml``).
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,9 @@ from collectors.comum import ConfiguracaoPendenteError
 LOGGER = logging.getLogger(__name__)
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "fontes.yaml"
 VALOR_PENDENTE = "CONFIRMAR"
+TAMANHO_MAXIMO_XML = 2 * 1024 * 1024
+NO_REGISTRO_XML = "DadosHidrometereologicos"
+TAMANHO_LOTE_UPSERT = 500
 
 
 def carregar_configuracao(caminho: Path = CONFIG_PATH) -> dict[str, Any]:
@@ -43,15 +48,27 @@ def _caminho_valor(registro: Any, caminho: str) -> Any:
     return valor
 
 
-def _data_hora_com_fuso(valor: Any) -> str:
+def _fuso(valor: str | None) -> timezone | None:
+    """Converte um deslocamento '-03:00' em timezone; None mantém a exigência de fuso."""
+    if valor in (None, ""):
+        return None
+    try:
+        return datetime.fromisoformat(f"2000-01-01T00:00:00{valor}").tzinfo  # type: ignore[return-value]
+    except ValueError as erro:
+        raise ValueError(f"fuso_horario_fonte inválido: {valor}") from erro
+
+
+def _data_hora_com_fuso(valor: Any, fuso_padrao: timezone | None = None) -> str:
     if not isinstance(valor, str):
         raise ValueError("data_hora_leitura deve ser uma string ISO-8601")
     try:
-        data_hora = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+        data_hora = datetime.fromisoformat(valor.strip().replace("Z", "+00:00"))
     except ValueError as erro:
         raise ValueError(f"Data/hora de leitura inválida: {valor}") from erro
     if data_hora.tzinfo is None:
-        raise ValueError("data_hora_leitura precisa incluir fuso horário")
+        if fuso_padrao is None:
+            raise ValueError("data_hora_leitura precisa incluir fuso horário")
+        data_hora = data_hora.replace(tzinfo=fuso_padrao)
     return data_hora.astimezone(timezone.utc).isoformat()
 
 
@@ -73,25 +90,34 @@ def normalizar_registros(
     codigo_estacao: str,
     campos: dict[str, str | None],
     coletado_em: datetime | None = None,
+    fuso_padrao: timezone | None = None,
+    ignorar_sem_medida: bool = False,
 ) -> list[dict[str, Any]]:
-    """Normaliza registros já extraídos segundo os caminhos confirmados em YAML."""
+    """Normaliza registros já extraídos segundo os caminhos confirmados em YAML.
+
+    ``fuso_padrao`` só é aplicado a horários sem fuso explícito.
+    ``ignorar_sem_medida`` descarta linhas sem nível, vazão nem chuva (comuns na
+    telemetria da ANA) em vez de abortar a estação inteira.
+    """
     coletado_em = coletado_em or datetime.now(timezone.utc)
     saida: list[dict[str, Any]] = []
     vistos: set[str] = set()
 
     for registro in registros:
         data_hora = _data_hora_com_fuso(
-            _caminho_valor(registro, campos["data_hora_leitura"])
+            _caminho_valor(registro, campos["data_hora_leitura"]), fuso_padrao
         )
         if data_hora in vistos:
             continue
-        vistos.add(data_hora)
 
         nivel_cm = _numero_opcional(registro, campos.get("nivel_cm"))
         vazao = _numero_opcional(registro, campos.get("vazao"))
         chuva_mm = _numero_opcional(registro, campos.get("chuva_mm"))
         if nivel_cm is None and vazao is None and chuva_mm is None:
+            if ignorar_sem_medida:
+                continue
             raise ValueError("Registro sem nível, vazão ou chuva")
+        vistos.add(data_hora)
 
         tendencia_caminho = campos.get("tendencia")
         tendencia = (
@@ -128,6 +154,9 @@ def _validar_configuracao(configuracao: dict[str, Any]) -> None:
     )
     if not any(campos.get(campo) for campo in ("nivel_cm", "vazao", "chuva_mm")):
         obrigatorios["resposta.campos.medida"] = None
+
+    if configuracao.get("formato", "json") not in ("json", "xml"):
+        obrigatorios["formato (json ou xml)"] = None
 
     pendentes = [
         nome for nome, valor in obrigatorios.items()
@@ -179,6 +208,40 @@ def _validar_configuracao(configuracao: dict[str, Any]) -> None:
         )
 
 
+def _nome_local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def extrair_registros_xml(texto: str, codigo_estacao: str) -> list[dict[str, str]]:
+    """Extrai as linhas DadosHidrometereologicos do XML da telemetria da ANA."""
+    if len(texto.encode("utf-8")) > TAMANHO_MAXIMO_XML:
+        raise ValueError("XML da ANA excede o limite de segurança de 2 MiB")
+    if "<!DOCTYPE" in texto or "<!ENTITY" in texto:
+        raise ValueError("XML da ANA com DTD/entidades não é aceito")
+    try:
+        raiz = ET.fromstring(texto)
+    except ET.ParseError as erro:
+        raise ValueError("A resposta da ANA não é um XML válido") from erro
+    registros: list[dict[str, str]] = []
+    for no in raiz.iter():
+        if _nome_local(no.tag) != NO_REGISTRO_XML:
+            continue
+        registro = {_nome_local(filho.tag): (filho.text or "").strip() for filho in no}
+        if registro.get("CodEstacao") != codigo_estacao:
+            raise ValueError("Resposta da ANA traz outra estação")
+        registros.append(registro)
+    return registros
+
+
+def datas_consulta(agora: datetime | None = None, dias: int = 1) -> dict[str, str]:
+    """Janela de consulta (dd/mm/aaaa) de ``dias`` atrás até hoje."""
+    agora = agora or datetime.now(timezone.utc)
+    return {
+        "data_inicio": (agora - timedelta(days=dias)).strftime("%d/%m/%Y"),
+        "data_fim": agora.strftime("%d/%m/%Y"),
+    }
+
+
 def _extrair_registros(payload: Any, caminho: str) -> list[dict[str, Any]]:
     if caminho:
         payload = _caminho_valor(payload, caminho)
@@ -208,14 +271,20 @@ def coletar(
         prefixo = autenticacao.get("prefixo", "")
         headers[autenticacao["nome_cabecalho"]] = f"{prefixo}{token}"
 
+    formato = configuracao.get("formato", "json")
+    fuso_padrao = _fuso(configuracao.get("fuso_horario_fonte"))
+    janela = datas_consulta(dias=int(configuracao.get("janela_dias", 1)))
     resultado: list[dict[str, Any]] = []
     falhas = 0
     for estacao in configuracao["estacoes"]:
         codigo = str(estacao["codigo_oficial"])
-        parametros = {
-            chave: str(valor).replace("{codigo_oficial}", codigo)
-            for chave, valor in configuracao["parametros"].items()
-        }
+        substituicoes = {"codigo_oficial": codigo, **janela}
+        parametros = {}
+        for chave, valor in configuracao["parametros"].items():
+            texto = str(valor)
+            for nome, conteudo in substituicoes.items():
+                texto = texto.replace("{" + nome + "}", conteudo)
+            parametros[chave] = texto
         try:
             resposta_http = sessao.get(
                 configuracao["endpoint"],
@@ -224,14 +293,18 @@ def coletar(
                 timeout=30,
             )
             resposta_http.raise_for_status()
-            payload = resposta_http.json()
-            registros = _extrair_registros(
-                payload, configuracao["resposta"]["caminho_registros"]
-            )
+            if formato == "xml":
+                registros = extrair_registros_xml(resposta_http.text, codigo)
+            else:
+                registros = _extrair_registros(
+                    resposta_http.json(), configuracao["resposta"]["caminho_registros"]
+                )
             leituras = normalizar_registros(
                 registros,
                 codigo_estacao=codigo,
                 campos=configuracao["resposta"]["campos"],
+                fuso_padrao=fuso_padrao,
+                ignorar_sem_medida=formato == "xml",
             )
             resultado.extend(leituras)
         except Exception:
@@ -271,16 +344,29 @@ def persistir_no_supabase(
         .execute()
     )
     fonte_id = fonte_resultado.data["id"]
-    persistidas = 0
 
-    for leitura in leituras:
-        estacao_resultado = (
-            cliente.table("estacoes")
-            .select("id")
-            .eq("codigo_oficial", leitura["codigo_estacao"])
-            .single()
-            .execute()
+    codigos = sorted({leitura["codigo_estacao"] for leitura in leituras})
+    estacoes = (
+        cliente.table("estacoes")
+        .select("id,codigo_oficial")
+        .in_("codigo_oficial", codigos)
+        .execute()
+        .data
+        or []
+    )
+    ids_por_codigo = {str(e["codigo_oficial"]): e["id"] for e in estacoes}
+    sem_cadastro = [codigo for codigo in codigos if codigo not in ids_por_codigo]
+    if sem_cadastro:
+        LOGGER.warning(
+            "Estações sem cadastro em public.estacoes (aplique a migration): %s",
+            ", ".join(sem_cadastro),
         )
+
+    linhas = []
+    for leitura in leituras:
+        estacao_id = ids_por_codigo.get(leitura["codigo_estacao"])
+        if estacao_id is None:
+            continue
         valores = {
             chave_coluna: leitura[chave_coluna]
             for chave_coluna in (
@@ -292,12 +378,18 @@ def persistir_no_supabase(
                 "coletado_em",
             )
         }
-        valores.update(estacao_id=estacao_resultado.data["id"], fonte_id=fonte_id)
+        valores.update(estacao_id=estacao_id, fonte_id=fonte_id)
+        linhas.append(valores)
+    if not linhas:
+        raise RuntimeError("Nenhuma estação coletada está cadastrada em public.estacoes")
+
+    # Upsert em lotes: uma requisição por lote em vez de uma por leitura.
+    for inicio in range(0, len(linhas), TAMANHO_LOTE_UPSERT):
         cliente.table("leituras").upsert(
-            valores, on_conflict="estacao_id,data_hora_leitura"
+            linhas[inicio : inicio + TAMANHO_LOTE_UPSERT],
+            on_conflict="estacao_id,data_hora_leitura",
         ).execute()
-        persistidas += 1
-    return persistidas
+    return len(linhas)
 
 
 def main() -> None:

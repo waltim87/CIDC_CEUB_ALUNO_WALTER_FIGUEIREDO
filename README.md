@@ -275,3 +275,26 @@ Secrets necessários (GitHub → Settings → Secrets and variables → Actions)
 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (chave secret/service_role, **só** aqui) e,
 opcionalmente, `ANA_API_TOKEN`. O job falha se nada puder ser registrado no Supabase.
 Teste local: defina as variáveis no `.env` e rode `python -m collectors.executar`.
+
+## Etapa 7 — coleta ANA real ativada (14/10/2026)
+
+O coletor ANA passou a usar o serviço **público e sem token** da telemetria da ANA
+(`https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos`,
+resposta XML), validado com consultas reais. Estações do Purus no AM:
+`13410000` Seringal da Caridade (Boca do Acre), `13870000` Lábrea,
+`13962000` Arumã-Jusante (Beruri) e `13990000` Beruri.
+
+- **Fuso horário:** a ANA não informa fuso em `DataHora`. Ele foi **inferido
+  empiricamente** como horário de Brasília (UTC−03:00); só esse fuso dá atraso
+  plausível (~15–30 min) para estações de AC, AM, RO e PA consultadas no mesmo
+  instante. Confirme com a ANA antes de uso operacional (`config/fontes.yaml`).
+- Linhas da telemetria sem nível, vazão e chuva são ignoradas; a gravação no
+  Supabase é feita em lotes.
+- **Cotas de alerta/emergência continuam nulas**: sem elas o componente de
+  hidrologia não é calculado e o índice fica indisponível — por projeto, nada é
+  inventado. Preencha `cota_alerta`/`cota_emergencia` com valores oficiais (SGB/SACE).
+
+**Passo obrigatório:** no SQL Editor do Supabase, execute
+`db/migrations/202610140001_estacoes_ana_purus.sql`. Sem ela, a fonte ANA aparece
+como falha ("Nenhuma estação coletada está cadastrada") e as demais seguem normalmente.
+Teste local sem gravar: `python -c "from collectors.ana import coletar; print(len(coletar()))"`.

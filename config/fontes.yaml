@@ -2,33 +2,50 @@ ana:
   nome: ANA HidroWebService
   tipo: hidrologia
   periodicidade_min: 60
-  status: CONFIRMAR
-  endpoint: CONFIRMAR
-  documentacao_oficial: https://www.gov.br/ana/pt-br/assuntos/monitoramento-e-eventos-criticos/monitoramento-hidrologico/orientacoes-manuais/manuais-de-sistemas-e-servicos-de-disponibilizacao-de-dados-hidrologicos
+  status: ativo
+  # Serviço público de telemetria da ANA (sem token). Verificado em 14/10/2026
+  # com consultas reais às estações abaixo.
+  endpoint: https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos
+  documentacao_oficial: https://telemetriaws1.ana.gov.br/ServiceANA.asmx
+  manuais_ana: https://www.gov.br/ana/pt-br/assuntos/monitoramento-e-eventos-criticos/monitoramento-hidrologico/orientacoes-manuais/manuais-de-sistemas-e-servicos-de-disponibilizacao-de-dados-hidrologicos
+  formato: xml
   autenticacao:
-    tipo: CONFIRMAR
-    variavel_ambiente: ANA_API_TOKEN
-    nome_cabecalho: CONFIRMAR
-    prefixo: CONFIRMAR
-  parametros: CONFIRMAR
+    tipo: sem_autenticacao
+  parametros:
+    codEstacao: "{codigo_oficial}"
+    dataInicio: "{data_inicio}"
+    dataFim: "{data_fim}"
+  janela_dias: 1
+  # A telemetria devolve DataHora SEM fuso. INFERIDO empiricamente como horário
+  # de Brasília (UTC-03:00): estações de AC, AM, RO e PA consultadas no mesmo
+  # instante tinham a mesma última hora, e só UTC-03:00 resulta em atraso
+  # plausível (~15-30 min). Confirmar com a ANA antes de uso operacional.
+  fuso_horario_fonte: "-03:00"
+  fuso_confirmacao: inferido_empiricamente
+  # Unidades usuais da telemetria ANA: Nivel em cm, Vazao em m3/s, Chuva em mm.
+  # Confirmar por estação no cadastro oficial.
   resposta:
-    caminho_registros: CONFIRMAR
+    caminho_registros: ""
     campos:
-      data_hora_leitura: CONFIRMAR
-      nivel_cm: CONFIRMAR
-      vazao: CONFIRMAR
-      chuva_mm: CONFIRMAR
-      tendencia: CONFIRMAR
+      data_hora_leitura: DataHora
+      nivel_cm: Nivel
+      vazao: Vazao
+      chuva_mm: Chuva
+      tendencia: null
+  # Estações do Purus no AM com nível transmitido (inventário ANA 03-04/10/2026).
   estacoes:
-    - nome: "CONFIRMAR - estação piloto do Purus em Lábrea/AM"
-      codigo_oficial: CONFIRMAR
-      municipio_id_ibge: "1302405"
-    - nome: "CONFIRMAR - estação piloto do Purus em Beruri/AM"
-      codigo_oficial: CONFIRMAR
-      municipio_id_ibge: "1300631"
-    - nome: "CONFIRMAR - estação piloto do Purus em Boca do Acre/AM"
-      codigo_oficial: CONFIRMAR
-      municipio_id_ibge: "1300706"
+    - nome: "SERINGAL DA CARIDADE"
+      codigo_oficial: "13410000"
+      municipio_id_ibge: "1300706"  # Boca do Acre/AM
+    - nome: "LÁBREA"
+      codigo_oficial: "13870000"
+      municipio_id_ibge: "1302405"  # Lábrea/AM
+    - nome: "ARUMÃ - JUSANTE"
+      codigo_oficial: "13962000"
+      municipio_id_ibge: "1300631"  # Beruri/AM
+    - nome: "BERURI"
+      codigo_oficial: "13990000"
+      municipio_id_ibge: "1300631"  # Beruri/AM
 
 inpe:
   nome: INPE Queimadas
