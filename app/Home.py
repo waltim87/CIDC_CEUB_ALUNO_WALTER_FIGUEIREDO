@@ -11,7 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import streamlit as st
 
 from app.auth import (
+    CadastroIncompleto,
     cliente_publico,
+    processar_retorno_google,
     encerrar_sessao,
     obter_perfil,
     renderizar_login,
@@ -36,9 +38,22 @@ from app.permissoes import renderizar_permissoes
 
 st.set_page_config(page_title="CIDC | Defesa Civil", page_icon="🌧️", layout="wide")
 
+processar_retorno_google()
+
 try:
     cliente = cliente_publico()
     perfil = obter_perfil(cliente)
+except CadastroIncompleto as pendente:
+    from app.comum import carregar_municipios
+    from app.voluntarios import formulario_completar_cadastro
+
+    if formulario_completar_cadastro(cliente, carregar_municipios(cliente), pendente.usuario):
+        st.session_state.pop("cidc_perfil", None)
+        st.rerun()
+    if st.button("Sair desta conta"):
+        encerrar_sessao(cliente)
+        st.rerun()
+    st.stop()
 except PermissionError as erro:
     st.error(str(erro))
     if st.button("Sair desta conta", width="stretch"):

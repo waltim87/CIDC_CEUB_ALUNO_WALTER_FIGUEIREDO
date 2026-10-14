@@ -144,6 +144,63 @@ def concluir_cadastro_pendente(cliente: Any, metadados: dict[str, Any]) -> bool:
     return True
 
 
+def formulario_completar_cadastro(cliente: Any, municipios: dict[str, dict[str, str]], usuario: Any) -> bool:
+    """Primeiro acesso de uma conta sem perfil (ex.: Google): dados mínimos + termo.
+
+    A conta entra como voluntário (leitor); o administrador muda o perfil depois em
+    "Usuários e permissões". Retorna True quando o cadastro foi concluído.
+    """
+    metadados = getattr(usuario, "user_metadata", None) or {}
+    email = getattr(usuario, "email", None) or metadados.get("email") or ""
+    st.title("Complete seus dados")
+    st.write(f"Você entrou como **{email}**. Falta pouco: confira seus dados e aceite o termo.")
+    st.markdown(TERMO)
+    with st.form("completar-cadastro"):
+        c1, c2 = st.columns(2)
+        nome = c1.text_input("Nome completo *", value=metadados.get("full_name") or metadados.get("name") or "")
+        telefone = c2.text_input("Telefone / WhatsApp com DDD *")
+        codigos = sorted(municipios, key=lambda c: municipios[c]["nome"])
+        municipio_id = st.selectbox("Município onde atua *", codigos, index=None,
+                                    format_func=lambda c: f"{municipios[c]['nome']}/{municipios[c].get('uf', '')}",
+                                    placeholder="Escolha o município")
+        habilidades = st.multiselect("Habilidades", HABILIDADES)
+        c1, c2 = st.columns(2)
+        embarcacao = c1.checkbox("Tenho embarcação disponível")
+        disponibilidade = c2.selectbox("Disponibilidade", ["fins de semana", "noites", "integral", "emergências"])
+        aceite = st.checkbox("Li e aceito o termo de responsabilidade acima *")
+        enviar = st.form_submit_button("Concluir cadastro", type="primary")
+    st.caption("Você entra como voluntário: lê todo o painel e registra relatos. Se for da equipe da Defesa "
+               "Civil ou da prefeitura, peça ao administrador para liberar seu perfil em \"Usuários e permissões\".")
+    if not enviar:
+        return False
+    erro = validar_dados_basicos(nome, telefone, municipio_id, aceite)
+    if erro:
+        st.error(erro)
+        return False
+    try:
+        cliente.rpc("cidc_cadastrar_voluntario", {
+            "p_nome": nome.strip(), "p_telefone": telefone.strip(), "p_municipio_id": municipio_id,
+            "p_habilidades": habilidades, "p_possui_embarcacao": embarcacao,
+            "p_disponibilidade": disponibilidade, "p_termo_versao": TERMO_VERSAO, "p_aceite": True,
+        }).execute()
+    except Exception as falha:
+        st.error(f"Não foi possível concluir o cadastro: {falha}")
+        return False
+    return True
+
+
+def validar_dados_basicos(nome: str, telefone: str, municipio_id: str | None, aceite: bool) -> str | None:
+    if not aceite:
+        return "É preciso aceitar o termo de responsabilidade."
+    if len(nome.strip().split()) < 2:
+        return "Informe o nome completo (nome e sobrenome)."
+    if len("".join(c for c in telefone if c.isdigit())) < 10:
+        return "Informe o telefone com DDD."
+    if not municipio_id:
+        return "Escolha o município onde atua."
+    return None
+
+
 def renderizar_meu_cadastro() -> None:
     from app.comum import cliente_supabase, exigir_perfil
 
