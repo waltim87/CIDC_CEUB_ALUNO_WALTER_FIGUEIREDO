@@ -5,6 +5,9 @@ Plataforma Integrada de Triagem e Resiliência — protótipo do desafio PN-PDC
 
 > **Protótipo, sem validação oficial; confirme nos órgãos oficiais.**
 
+**Painel no ar:** <https://sistematizacao-defesa-civil-walter-ceub-eng-ia.streamlit.app>
+(Streamlit Community Cloud; Secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TELEGRAM_BOT_TOKEN`).
+
 ## Fase 1 — banco inicial e coletor ANA
 
 ### Contas e segredos
