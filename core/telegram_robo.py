@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import unicodedata
 from datetime import datetime, timezone
@@ -93,7 +94,8 @@ def processar_mensagens(cliente: Any, telegram: Telegram) -> dict[str, int]:
         comando, _, argumento = texto.partition(" ")
         comando = comando.split("@")[0].lower()
         try:
-            if comando == "/start" and argumento.strip():
+            # Só um código hexadecimal de 12 caracteres é vínculo de voluntário; outro texto é /start normal.
+            if comando == "/start" and re.fullmatch(r"[0-9a-f]{12}", argumento.strip()):
                 voluntario = (
                     cliente.table("voluntarios").select("id,nome,municipio_id")
                     .eq("telegram_codigo", argumento.strip()).limit(1).execute().data or []

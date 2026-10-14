@@ -89,8 +89,8 @@ class TestInscricoes(unittest.TestCase):
 
     def test_codigo_do_voluntario_vincula_telegram(self) -> None:
         banco = Banco({"municipios": MUNICIPIOS, "voluntarios": [
-            {"id": "v1", "nome": "Ana Souza", "municipio_id": "1300706", "telegram_codigo": "abc123"}]})
-        resumo = telegram_robo.processar_mensagens(banco, TelegramFalso([mensagem(1, 777, "/start abc123")]))
+            {"id": "v1", "nome": "Ana Souza", "municipio_id": "1300706", "telegram_codigo": "abc123def456"}]})
+        resumo = telegram_robo.processar_mensagens(banco, TelegramFalso([mensagem(1, 777, "/start abc123def456")]))
         self.assertEqual(resumo["voluntarios"], 1)
         self.assertEqual(banco.escritas_em("voluntarios", "update")[0][2], {"telegram_chat_id": "777"})
         self.assertEqual(banco.escritas_em("assinaturas_alerta", "upsert")[0][2]["municipio_id"], "1300706")
