@@ -37,7 +37,7 @@ try:
     perfil = obter_perfil(cliente)
 except PermissionError as erro:
     st.error(str(erro))
-    if st.button("Sair desta conta", use_container_width=True):
+    if st.button("Sair desta conta", width="stretch"):
         try:
             encerrar_sessao(cliente)
             st.rerun()
@@ -60,7 +60,7 @@ if perfil is None:
     ).run()
 else:
     st.sidebar.success(f"{perfil['nome']} · {perfil['perfil']}")
-    if st.sidebar.button("Sair", use_container_width=True):
+    if st.sidebar.button("Sair", width="stretch"):
         try:
             encerrar_sessao(cliente)
             st.rerun()

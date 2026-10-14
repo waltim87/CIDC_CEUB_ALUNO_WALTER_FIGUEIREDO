@@ -2,8 +2,8 @@ name: Coleta de dados abertos
 
 on:
   schedule:
-    # A cada hora; o GitHub pode atrasar execuções agendadas em alguns minutos.
-    - cron: "7 * * * *"
+    # A cada 3 horas (UTC); o GitHub pode atrasar execuções agendadas em alguns minutos.
+    - cron: "7 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -35,3 +35,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m core.automatico
+      - name: Robo de analise de risco (IA gratuita ou modelo fixo)
+        # Falha do robô não invalida a coleta já gravada.
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m core.robo

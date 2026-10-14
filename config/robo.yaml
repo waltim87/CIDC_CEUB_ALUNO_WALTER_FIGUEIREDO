@@ -1,0 +1,33 @@
+# Robô de análise de risco (core/robo.py), executado a cada 3 horas pelo
+# GitHub Actions. TODOS os limiares abaixo são HIPÓTESES INICIAIS, sem
+# validação oficial; ajuste com hidrólogos e com a Defesa Civil.
+validacao_oficial: false
+
+# Janela de leituras analisadas por estação.
+janela_horas: 48
+# Leitura de nível mais antiga que isto vira "sem_dados" (não é risco zero).
+idade_maxima_leitura_horas: 6
+# Mínimo de horas entre a primeira e a última leitura para estimar a variação.
+horas_minimas_para_tendencia: 6
+
+# Variação absoluta do nível projetada para 24 h (cm). Rios amazônicos variam
+# alguns cm/dia; quedas ou subidas rápidas antecedem isolamento (seca) ou
+# inundação (cheia).
+variacao_24h_cm:
+  estavel: 3
+  atencao: 15
+  alerta: 30
+  alto: 50
+
+# Proximidade das cotas oficiais (quando cadastradas em public.estacoes).
+fracao_cota_atencao: 0.9
+# Proximidade dos extremos históricos (quando cadastrados).
+margem_extremo_historico: 0.05
+
+ia:
+  # Gemini, camada gratuita. Sem GEMINI_API_KEY, usa o modelo de texto fixo.
+  modelo: gemini-flash-lite-latest
+  variavel_chave: GEMINI_API_KEY
+  # Limite por execução para ficar folgado na cota gratuita.
+  max_chamadas_por_execucao: 20
+  timeout_segundos: 30

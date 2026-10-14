@@ -43,8 +43,14 @@ def gerar_pdf(
     *,
     resumo: Mapping[str, Any] | None = None,
     colunas_detalhe: Sequence[str] | None = None,
+    graficos: Sequence[tuple[str, Mapping[str, float]]] | None = None,
+    analises: Sequence[Mapping[str, Any]] | None = None,
 ) -> bytes:
-    """PDF simples em paisagem: aviso, resumo opcional e tabela."""
+    """PDF em paisagem: aviso, resumo, gráficos, análises do robô e tabela.
+
+    ``graficos``: lista de (título, {rótulo: valor}) desenhados como barras.
+    ``analises``: dicts com Município, sinal, texto e gerado_em (core/robo.py).
+    """
     from fpdf import FPDF
 
     pdf = FPDF(orientation="L", unit="mm", format="A4")
@@ -67,6 +73,11 @@ def gerar_pdf(
                 new_x="LMARGIN", new_y="NEXT",
             )
         pdf.ln(2)
+    for titulo_grafico, dados in graficos or []:
+        _grafico_barras(pdf, titulo_grafico, dados)
+    if analises:
+        _anexar_analises(pdf, analises)
+        pdf.add_page()
     largura = (pdf.w - pdf.l_margin - pdf.r_margin) / max(len(colunas), 1)
     limite = max(int(largura / 1.7), 6)
     pdf.set_font("Helvetica", "B", 8)
@@ -82,6 +93,84 @@ def gerar_pdf(
     if colunas_detalhe:
         _anexar_fichas(pdf, linhas, colunas_detalhe)
     return bytes(pdf.output())
+
+
+# Cores RGB compartilhadas por classes do índice e sinais do robô.
+CORES_CLASSE = {
+    "Normal": (46, 160, 67),
+    "Atenção": (230, 190, 30),
+    "Alerta": (240, 130, 20),
+    "Alto": (215, 60, 40),
+    "Crítico": (140, 20, 90),
+    "Sem dados": (150, 150, 150),
+    "Sem índice": (150, 150, 150),
+}
+COR_PADRAO = (40, 90, 160)
+
+
+def _cor(rotulo: str) -> tuple[int, int, int]:
+    for nome, cor in CORES_CLASSE.items():
+        if nome.lower() in str(rotulo).lower():
+            return cor
+    return COR_PADRAO
+
+
+def _grafico_barras(pdf: Any, titulo: str, dados: Mapping[str, float]) -> None:
+    """Barras horizontais desenhadas com primitivas do fpdf2 (sem dependências)."""
+    itens = [(str(r), float(v)) for r, v in dados.items() if v is not None]
+    if not itens:
+        return
+    altura_barra = 5
+    if pdf.get_y() + 10 + altura_barra * len(itens) > pdf.h - 14:
+        pdf.add_page()
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 7, _latin1(titulo), new_x="LMARGIN", new_y="NEXT")
+    maximo = max(v for _, v in itens) or 1
+    largura_rotulo = 60
+    largura_util = pdf.w - pdf.l_margin - pdf.r_margin - largura_rotulo - 20
+    pdf.set_font("Helvetica", "", 8)
+    for rotulo, valor in itens:
+        y = pdf.get_y()
+        pdf.cell(largura_rotulo, altura_barra, _latin1(rotulo)[:40])
+        pdf.set_fill_color(*_cor(rotulo))
+        largura = max(largura_util * valor / maximo, 0.5)
+        pdf.rect(pdf.l_margin + largura_rotulo, y + 0.8, largura, altura_barra - 1.6, style="F")
+        pdf.set_xy(pdf.l_margin + largura_rotulo + largura + 2, y)
+        pdf.cell(18, altura_barra, f"{valor:g}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+
+def _anexar_analises(pdf: Any, analises: Sequence[Mapping[str, Any]]) -> None:
+    """Cartões com faixa colorida pelo sinal e o texto do robô."""
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, _latin1("Análises de risco do robô (triagem indicativa)"), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.multi_cell(
+        0, 4,
+        _latin1("Sinais calculados com limiares hipotéticos (config/robo.yaml), sem validação "
+                "oficial. Texto redigido por IA gratuita ou modelo fixo; exige revisão humana."),
+        new_x="LMARGIN", new_y="NEXT",
+    )
+    pdf.ln(2)
+    for analise in analises:
+        if pdf.get_y() > pdf.h - 40:
+            pdf.add_page()
+        y = pdf.get_y()
+        sinal = str(analise.get("sinal", ""))
+        pdf.set_fill_color(*_cor(sinal))
+        pdf.rect(pdf.l_margin, y, 3, 16, style="F")
+        pdf.set_xy(pdf.l_margin + 5, y)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(
+            0, 5,
+            _latin1(f"{analise.get('Município', '')} - {sinal} - {analise.get('gerado_em', '')}"),
+            new_x="LMARGIN", new_y="NEXT",
+        )
+        pdf.set_x(pdf.l_margin + 5)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.multi_cell(0, 4, _latin1(analise.get("texto", "")), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_y(max(pdf.get_y(), y + 16) + 2)
 
 
 def _anexar_fichas(pdf: Any, linhas: Sequence[Mapping[str, Any]], colunas: Sequence[str]) -> None:

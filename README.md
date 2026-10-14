@@ -298,3 +298,34 @@ resposta XML), validado com consultas reais. Estações do Purus no AM:
 `db/migrations/202610140001_estacoes_ana_purus.sql`. Sem ela, a fonte ANA aparece
 como falha ("Nenhuma estação coletada está cadastrada") e as demais seguem normalmente.
 Teste local sem gravar: `python -c "from collectors.ana import coletar; print(len(coletar()))"`.
+
+## Etapa 8 — visual com mapa de risco, gráficos e robô de análise (a cada 3 h)
+
+**Robô** (`core/robo.py` + `core/llm.py`, roda no GitHub Actions a cada 3 horas,
+cron `7 */3 * * *`): para cada estação ANA calcula nível atual, variação projetada
+em 24 h e direção (subindo/descendo/estável); compara com cotas e extremos
+históricos quando cadastrados; consolida um **sinal por município** (Sem dados,
+Normal, Atenção, Alerta, Alto) e grava em `public.analises_risco`. O texto é
+redigido pelo **Gemini (camada gratuita)** e é **descartado automaticamente** se
+citar qualquer número que não esteja nos dados — nesse caso, ou sem chave, usa o
+modelo de texto fixo. Limiares em `config/robo.yaml` são hipóteses sem validação
+oficial. Leitura atrasada vira "Sem dados", nunca "Normal".
+
+**Painel**: KPIs, mapa de risco por cidade (pydeck + CARTO/OpenStreetMap, sem
+token; cor = sinal, tamanho = população IBGE 2022, estações ANA com borda azul),
+gráficos (sinais, classes do índice, variação 24 h, série de nível 72 h, pesos) e
+cartões de análise com fonte e horário. **Relatórios**: o PDF ganhou gráficos de
+barras e uma seção com as análises do robô; o CSV ganhou as colunas do robô.
+
+Custo: zero. Gemini gratuito (máx. 20 chamadas a cada 3 h), GitHub Actions em
+repositório público, Supabase Free, Streamlit Community Cloud.
+
+**Passos (SQL Editor do Supabase, nesta ordem):**
+1. `db/migrations/202610140001_estacoes_ana_purus.sql`
+2. `db/migrations/202610140002_municipios_coordenadas_populacao.sql`
+3. `db/migrations/202610140003_analises_risco_robo.sql`
+
+**Opcional (texto por IA):** crie uma chave gratuita em
+<https://aistudio.google.com/apikey> e cadastre-a em GitHub → Settings → Secrets
+and variables → Actions como `GEMINI_API_KEY`. Sem ela, o robô funciona com o
+modelo de texto fixo.

@@ -1,0 +1,11 @@
+# Tema visual do painel (Streamlit Community Cloud lê este arquivo).
+[theme]
+base = "light"
+primaryColor = "#d9480f"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f1f4f8"
+textColor = "#1d2733"
+font = "sans serif"
+
+[server]
+headless = true

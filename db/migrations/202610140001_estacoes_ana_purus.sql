@@ -4,17 +4,25 @@
 -- e consultas reais ao ServiceANA em 14/10/2026.
 -- Cotas de alerta/emergência ficam NULAS até virem de fonte oficial (SGB/SACE).
 
+alter table public.estacoes
+    add column if not exists latitude double precision,
+    add column if not exists longitude double precision;
+
 update public.fontes
 set url = 'https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos'
 where nome = 'ANA HidroWebService';
 
-insert into public.estacoes (codigo_oficial, fonte_id, nome, rio, municipio_id, geom)
+insert into public.estacoes (
+    codigo_oficial, fonte_id, nome, rio, municipio_id, latitude, longitude, geom
+)
 select
     candidatas.codigo,
     fontes.id,
     candidatas.nome,
     'Purus',
     candidatas.municipio_id,
+    candidatas.lat,
+    candidatas.lon,
     extensions.st_setsrid(extensions.st_makepoint(candidatas.lon, candidatas.lat), 4326)
 from public.fontes
 cross join (
@@ -29,6 +37,8 @@ on conflict (codigo_oficial) do update
 set nome = excluded.nome,
     rio = excluded.rio,
     municipio_id = excluded.municipio_id,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
     geom = excluded.geom;
 
 -- Marcadores do seed da Fase 1 (sem código oficial e sem leituras).

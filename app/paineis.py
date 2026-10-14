@@ -19,6 +19,21 @@ from app.comum import (
     exigir_perfil,
     mostrar_aviso,
 )
+from app.visual import (
+    AVISO_ROBO,
+    aplicar_estilo,
+    carregar_analises,
+    carregar_municipios_mapa,
+    carregar_series,
+    cartao_analise,
+    grafico_barras,
+    grafico_series,
+    grafico_sinais,
+    grafico_variacao,
+    kpis_robo,
+    mapa_risco,
+)
+from core.robo import ROTULOS_SINAL
 from core.alertas import (
     atualizar_alerta,
     formatar_fontes,
@@ -91,6 +106,80 @@ def _buscar_municipio(cliente: Any, municipio_id: str | None) -> dict[str, Any]:
     return resultado.data[0] if resultado.data else {}
 
 
+def _classes_indice(indices: list[dict[str, Any]]) -> dict[str, str]:
+    """Classe do índice mais recente por município (ler_indices já vem ordenado)."""
+    classes: dict[str, str] = {}
+    for indice in indices:
+        classes.setdefault(indice["municipio_id"].strip(), indice["classe"])
+    return classes
+
+
+def _secao_situacao_visual(
+    cliente: Any,
+    municipios: dict[str, dict[str, str]],
+    indices: list[dict[str, Any]],
+    *,
+    limite_cartoes: int = 12,
+) -> dict[str, dict[str, Any]]:
+    """KPIs, mapa de risco por cidade, gráficos e análises do robô."""
+    aplicar_estilo()
+    analises = carregar_analises(cliente)
+    municipios_mapa = carregar_municipios_mapa(cliente)
+    if not analises:
+        st.info(
+            "O robô ainda não gerou análises (roda a cada 3 horas pelo GitHub Actions). "
+            "Sem análise não há sinal: isso não significa risco zero."
+        )
+    kpis_robo(analises, municipios_mapa)
+    aba_mapa, aba_graficos, aba_analises = st.tabs(
+        ["🗺️ Mapa de risco", "📈 Gráficos", "🤖 Análises do robô"]
+    )
+    with aba_mapa:
+        mapa_risco(municipios_mapa, analises, classes_indice=_classes_indice(indices))
+    with aba_graficos:
+        nomes = {codigo: m.get("nome", codigo) for codigo, m in municipios.items()}
+        coluna_a, coluna_b = st.columns(2)
+        with coluna_a:
+            grafico_sinais(analises)
+        with coluna_b:
+            if indices:
+                contagem: dict[str, int] = {}
+                for classe in _classes_indice(indices).values():
+                    contagem[classe] = contagem.get(classe, 0) + 1
+                grafico_barras(contagem, "Municípios por classe do índice")
+            else:
+                st.info("Índice indisponível: faltam cotas oficiais de alerta nas estações.")
+        grafico_variacao(analises, nomes)
+        try:
+            grafico_series(carregar_series(cliente))
+        except Exception as erro:
+            st.warning(f"Série de níveis indisponível: {erro}")
+    with aba_analises:
+        st.caption(AVISO_ROBO)
+        ordem = {"alto": 0, "alerta": 1, "atencao": 2, "normal": 3, "sem_dados": 4}
+        for codigo, analise in sorted(
+            analises.items(), key=lambda item: ordem.get(item[1].get("sinal"), 9)
+        )[:limite_cartoes]:
+            cartao_analise(_nome_municipio(municipios, codigo), analise)
+    return analises
+
+
+def _graficos_pdf(
+    resumo: dict[str, int], linhas: list[dict[str, Any]]
+) -> list[tuple[str, dict[str, float]]]:
+    """Gráficos do relatório: classes do índice e sinais do robô."""
+    classes = {
+        rotulo.replace("Municípios — ", ""): valor
+        for rotulo, valor in resumo.items()
+        if rotulo.startswith("Municípios — ")
+    }
+    sinais: dict[str, float] = {}
+    for linha in linhas:
+        sinal = linha.get("Sinal do robô") or "Sem estação"
+        sinais[sinal] = sinais.get(sinal, 0) + 1
+    return [("Municípios por classe do índice", classes), ("Municípios por sinal do robô", sinais)]
+
+
 def renderizar_painel_principal() -> None:
     st.title("Centro de Inteligência da Defesa Civil")
     st.caption("Painel principal — situação e tendência municipal")
@@ -104,18 +193,16 @@ def renderizar_painel_principal() -> None:
         st.error(f"Não foi possível carregar o painel: {erro}")
         return
 
+    _secao_situacao_visual(cliente, municipios, indices)
+
     st.subheader("Pesos do Índice de Impacto Humanitário")
     st.caption(
         "Hipótese configurável, nunca fixa no código. "
         + ("Validação oficial registrada." if validacao_oficial else "Ainda sem validação oficial.")
     )
-    st.dataframe(
-        [
-            {"Componente": nome.replace("_", " ").title(), "Peso (%)": peso}
-            for nome, peso in pesos.items()
-        ],
-        hide_index=True,
-        use_container_width=True,
+    grafico_barras(
+        {nome.replace("_", " ").title(): peso for nome, peso in pesos.items()},
+        "Peso de cada componente (%)",
     )
     if perfil["perfil"] not in PERFIS_GESTAO and perfil.get("municipio_id"):
         indices = [
@@ -144,7 +231,7 @@ def renderizar_painel_principal() -> None:
                 "Fontes e leituras": formatar_fontes(indice.get("fontes_json")),
             }
         )
-    st.dataframe(linhas, hide_index=True, use_container_width=True)
+    st.dataframe(linhas, hide_index=True, width="stretch")
     posicao = st.selectbox(
         "Explicação do índice",
         range(len(indices)),
@@ -210,6 +297,12 @@ def renderizar_gestor() -> None:
             f'"{SEM_INDICE}" até o motor gerar índices verificáveis.'
         )
 
+    analises = _secao_situacao_visual(cliente, municipios, indices, limite_cartoes=30)
+    for linha in linhas:
+        analise = analises.get(str(linha.get("Código IBGE", "")).strip())
+        linha["Sinal do robô"] = ROTULOS_SINAL.get(analise["sinal"]) if analise else "Sem estação"
+        linha["Análise do robô"] = analise["texto"] if analise else ""
+
     st.subheader("Totais do recorte")
     colunas_totais = st.columns(4)
     for posicao, (rotulo, valor) in enumerate(totais.items()):
@@ -225,7 +318,7 @@ def renderizar_gestor() -> None:
     st.dataframe(
         [{c: linha.get(c) for c in colunas_tabela} for linha in linhas],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     st.subheader("Detalhe de um município")
@@ -259,9 +352,10 @@ def renderizar_gestor() -> None:
 
     st.subheader("Exportar relatório")
     sufixo = "" if uf == "Todas" else f"_{uf}"
+    colunas_csv = [*COLUNAS_DETALHADAS, "Sinal do robô", "Análise do robô"]
     st.download_button(
         "Baixar CSV",
-        gerar_csv(linhas, COLUNAS_DETALHADAS),
+        gerar_csv(linhas, colunas_csv),
         file_name=f"situacao_municipios{sufixo}.csv",
         mime="text/csv",
     )
@@ -279,6 +373,17 @@ def renderizar_gestor() -> None:
                 COLUNAS_PDF_DETALHADO,
                 resumo=resumo_pdf,
                 colunas_detalhe=COLUNAS_DETALHADAS,
+                graficos=_graficos_pdf(resumo, linhas),
+                analises=[
+                    {
+                        "Município": _nome_municipio(municipios, codigo),
+                        "sinal": ROTULOS_SINAL.get(analise["sinal"], analise["sinal"]),
+                        "texto": analise["texto"],
+                        "gerado_em": analise["gerado_em"],
+                    }
+                    for codigo, analise in analises.items()
+                    if codigo in municipios
+                ],
             ),
             file_name=f"situacao_municipios{sufixo}.pdf",
             mime="application/pdf",
@@ -369,7 +474,7 @@ def renderizar_alertas() -> None:
                         st.dataframe(
                             entregas,
                             hide_index=True,
-                            use_container_width=True,
+                            width="stretch",
                         )
                 if alerta["status"] == "aprovado" and st.button(
                     "Enviar alerta aprovado",
@@ -406,6 +511,12 @@ def renderizar_coordenador() -> None:
             st.info("Associe um município ao perfil para abrir este painel.")
             return
         st.subheader(f"{municipio['nome']}/{municipio['uf']}")
+        aplicar_estilo()
+        analise = carregar_analises(cliente).get(str(municipio_id).strip())
+        if analise:
+            cartao_analise(f"{municipio['nome']}/{municipio['uf']}", analise)
+        else:
+            st.info("Sem análise do robô para este município (sem estação monitorada ou ainda não gerada).")
         for tabela, colunas in (
             ("comunidades", "id,nome,populacao_estimada,acesso_principal"),
             ("recursos", "tipo,quantidade,atualizado_em"),
@@ -427,7 +538,7 @@ def renderizar_coordenador() -> None:
                     "planos_contingencia": "Plano de contingência",
                 }[tabela]
             )
-            st.dataframe(resultado.data or [], hide_index=True, use_container_width=True)
+            st.dataframe(resultado.data or [], hide_index=True, width="stretch")
         _renderizar_acoes(cliente, municipio_id)
     except Exception as erro:
         st.error(f"Não foi possível carregar a gestão municipal: {erro}")
@@ -474,7 +585,7 @@ def _renderizar_acoes(cliente: Any, municipio_id: str) -> None:
                         for a in do_eixo
                     ],
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.caption("Nenhuma tarefa neste eixo.")
@@ -546,11 +657,16 @@ def renderizar_monitoramento() -> None:
             .execute()
         )
         st.subheader("Saúde das fontes")
-        st.dataframe(fontes.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(fontes.data or [], hide_index=True, width="stretch")
+        aplicar_estilo()
+        grafico_series(carregar_series(cliente))
+        analises = carregar_analises(cliente)
+        nomes_municipios = {c: m["nome"] for c, m in carregar_municipios(cliente).items()}
+        grafico_variacao(analises, nomes_municipios)
         st.subheader("Estações")
-        st.dataframe(estacoes.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(estacoes.data or [], hide_index=True, width="stretch")
         st.subheader("Leituras recentes")
-        st.dataframe(leituras.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(leituras.data or [], hide_index=True, width="stretch")
         _renderizar_comparacao_historica(cliente, leituras.data or [])
     except Exception as erro:
         st.error(f"Não foi possível carregar o monitoramento: {erro}")
@@ -609,7 +725,7 @@ def _renderizar_comparacao_historica(cliente: Any, leituras: list[dict[str, Any]
     if not linhas:
         st.info("Sem leituras de estações para comparar ainda.")
         return
-    st.dataframe(linhas, hide_index=True, use_container_width=True)
+    st.dataframe(linhas, hide_index=True, width="stretch")
 
 
 def renderizar_agente_campo() -> None:
@@ -708,9 +824,9 @@ def renderizar_saude() -> None:
             .execute()
         )
         st.subheader("Unidades de saúde")
-        st.dataframe(unidades.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(unidades.data or [], hide_index=True, width="stretch")
         st.subheader("Estoque de medicamentos e oxigênio")
-        st.dataframe(recursos.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(recursos.data or [], hide_index=True, width="stretch")
         st.caption("Rotas médicas ainda dependem de dados oficiais de infraestrutura e logística.")
     except Exception as erro:
         st.error(f"Não foi possível carregar o painel de saúde: {erro}")
@@ -746,9 +862,9 @@ def renderizar_logistica() -> None:
             .execute()
         )
         st.subheader("Estoque informado")
-        st.dataframe(recursos.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(recursos.data or [], hide_index=True, width="stretch")
         st.subheader("Capacidade dos abrigos")
-        st.dataframe(abrigos.data or [], hide_index=True, use_container_width=True)
+        st.dataframe(abrigos.data or [], hide_index=True, width="stretch")
         st.caption("Rotas fluviais/terrestres alternativas ainda precisam ser confirmadas localmente.")
         _renderizar_assinaturas(cliente, perfil)
     except Exception as erro:
@@ -798,7 +914,7 @@ def _renderizar_assinaturas(cliente: Any, perfil: dict[str, Any]) -> None:
                     for item in assinaturas
                 ],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
             por_id = {item["id"]: item for item in assinaturas}
             assinatura_id = st.selectbox(
@@ -895,7 +1011,7 @@ def renderizar_pesquisador() -> None:
             .execute()
         )
         dados = resultado.data or []
-        st.dataframe(dados, hide_index=True, use_container_width=True)
+        st.dataframe(dados, hide_index=True, width="stretch")
         if dados:
             buffer = io.StringIO()
             escritor = csv.DictWriter(buffer, fieldnames=list(dados[0]))
@@ -982,7 +1098,7 @@ def renderizar_administracao() -> None:
                 .data
                 or []
             )
-            st.dataframe(usuarios, hide_index=True, use_container_width=True)
+            st.dataframe(usuarios, hide_index=True, width="stretch")
             if usuarios:
                 por_id = {item["id"]: item for item in usuarios}
                 usuario_id = st.selectbox("Editar perfil", list(por_id))
@@ -1037,7 +1153,7 @@ def renderizar_administracao() -> None:
                 .data
                 or []
             )
-            st.dataframe(fontes, hide_index=True, use_container_width=True)
+            st.dataframe(fontes, hide_index=True, width="stretch")
             if fontes:
                 por_id = {fonte["id"]: fonte for fonte in fontes}
                 fonte_id = st.selectbox(
@@ -1099,7 +1215,7 @@ def renderizar_administracao() -> None:
                     for regra in regras
                 ],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
             classes = ["Normal", "Atenção", "Alerta", "Alto", "Crítico"]
             campos = {"score_total", *COMPONENTES}
