@@ -35,6 +35,7 @@ from app.voluntarios import renderizar_meu_cadastro, renderizar_relatos
 from app.meteorologia import renderizar_meteorologia
 from app.familias import renderizar_familias, usuario_coordena_abrigo
 from app.permissoes import renderizar_permissoes
+from app.chat import PERFIS_CHAT, renderizar_chat
 
 st.set_page_config(page_title="CIDC | Defesa Civil", page_icon="🌧️", layout="wide")
 
@@ -94,6 +95,8 @@ else:
     leitor = nome_perfil == "voluntario"  # lê tudo, não aprova alertas nem edita cadastros
     if nome_perfil != "pesquisador":
         paginas.insert(1, st.Page(renderizar_relatos, title="Relatos de campo", icon="📢"))
+    if nome_perfil in PERFIS_CHAT:
+        paginas.insert(1, st.Page(renderizar_chat, title="Chat interno", icon="💬"))
     paginas.insert(1, st.Page(renderizar_meteorologia, title="Meteorologia", icon="🌦️"))
     if leitor:
         paginas.insert(1, st.Page(renderizar_meu_cadastro, title="Meu cadastro", icon="🙋"))
