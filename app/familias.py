@@ -267,16 +267,29 @@ def renderizar_familias() -> None:
         municipio_id = perfil.get("municipio_id")
         if perfil["perfil"] == "administrador":
             municipios = carregar_municipios(cliente)
-            codigos = sorted(municipios, key=lambda c: municipios[c]["nome"])
-            municipio_id = st.selectbox("Município", codigos, format_func=lambda c: municipios[c]["nome"],
-                                        index=codigos.index(municipio_id) if municipio_id in codigos else 0, key="fam-mun")
+            # Só municípios com abrigo cadastrado, com a contagem (evita abrir num município vazio).
+            contagem_abrigos: dict[str, int] = {}
+            for a in cliente.table("abrigos").select("municipio_id").execute().data or []:
+                codigo = str(a["municipio_id"]).strip()
+                contagem_abrigos[codigo] = contagem_abrigos.get(codigo, 0) + 1
+            if not contagem_abrigos:
+                st.info("Nenhum abrigo cadastrado em nenhum município. Cadastre em Gestão municipal → Abrigos "
+                        "ou rode os dados de teste (db/testes/dados_teste_abrigos_familias_relatos.sql).")
+                return
+            codigos = sorted(contagem_abrigos, key=lambda c: municipios.get(c, {}).get("nome", c))
+            municipio_id = st.selectbox(
+                "Município (somente os que têm abrigo)", codigos,
+                format_func=lambda c: f"{municipios.get(c, {}).get('nome', c)} — {contagem_abrigos[c]} abrigo(s)",
+                index=codigos.index(municipio_id) if municipio_id in codigos else 0, key="fam-mun",
+            )
         abrigos = _abrigos_acessiveis(cliente, perfil, municipio_id)
     except Exception as erro:
         st.error(f"Não foi possível carregar: {erro}")
         return
     if not abrigos:
-        st.info("Nenhum abrigo disponível para você. Peça à coordenação municipal para designá-lo como "
-                "coordenador de um abrigo (menu Usuários e permissões).")
+        st.info("Nenhum abrigo disponível para você neste município. Cadastre um abrigo em Gestão municipal → "
+                "Abrigos, ou peça à coordenação municipal para designá-lo como coordenador de um abrigo "
+                "(menu Usuários e permissões).")
         return
     abrigo_id = st.selectbox("Abrigo", [a["id"] for a in abrigos],
                              format_func=lambda i: next(f"{a['nome']} ({a['ocupacao']}/{a['capacidade']})" for a in abrigos if a["id"] == i))
