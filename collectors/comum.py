@@ -106,6 +106,47 @@ def normalizar_registros(
     return resultado
 
 
+# Servidores que enviam o certificado TLS sem o intermediário: completamos a cadeia com o
+# certificado oficial indicado no próprio certificado (AIA). A verificação continua ativa.
+INTERMEDIARIOS_TLS = {
+    "servicodados.ibge.gov.br": "http://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt",
+}
+
+
+def verificacao_tls(url: str) -> str | bool:
+    """Caminho de um bundle (certifi + intermediário) para hosts com cadeia incompleta; senão True."""
+    import ssl
+    import tempfile
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname or ""
+    origem = INTERMEDIARIOS_TLS.get(host)
+    if not origem:
+        return True
+    destino = Path(tempfile.gettempdir()) / f"cidc_cadeia_{host}.pem"
+    if not destino.exists():
+        import certifi
+
+        der = requests.get(origem, timeout=30).content
+        pem = der.decode("ascii") if der.startswith(b"-----BEGIN") else ssl.DER_cert_to_PEM_cert(der)
+        bundle = Path(certifi.where()).read_text(encoding="utf-8")
+        destino.write_text(bundle + chr(10) + pem, encoding="utf-8")
+    return str(destino)
+
+
+def sessao_com_novas_tentativas(tentativas: int = 4) -> requests.Session:
+    """Sessão HTTP que repete em falha de conexão/tempo esgotado e em respostas 5xx (espera 2, 4, 8 s)."""
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    sessao = requests.Session()
+    politica = Retry(total=tentativas, connect=tentativas, read=tentativas, backoff_factor=2,
+                     status_forcelist=(500, 502, 503, 504), allowed_methods=("GET",))
+    sessao.mount("https://", HTTPAdapter(max_retries=politica))
+    sessao.mount("http://", HTTPAdapter(max_retries=politica))
+    return sessao
+
+
 def coletar_configurado(
     fonte: str,
     configuracao: dict[str, Any] | None = None,
@@ -136,11 +177,17 @@ def coletar_configurado(
             f"Tipo de autenticação não suportado ou pendente: {tipo_autenticacao}"
         )
 
+    if sessao is requests:
+        sessao = sessao_com_novas_tentativas()
+    opcoes: dict[str, Any] = {}
+    if isinstance(sessao, requests.Session):
+        opcoes["verify"] = verificacao_tls(configuracao["endpoint"])
     resposta = sessao.get(
         configuracao["endpoint"],
         params=configuracao.get("parametros"),
         headers=headers,
-        timeout=30,
+        timeout=60,
+        **opcoes,
     )
     resposta.raise_for_status()
     if configuracao["formato"] == "json":
