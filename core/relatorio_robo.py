@@ -82,7 +82,7 @@ def gerar_relatorio_robo(
         resumo["Rascunhos de alerta criados nesta execução"] = alertas_gerados
     graficos = [("Municípios por sinal do robô", contagem)]
     if posicoes:
-        graficos.append(("Posição do nível entre seca (0%) e cheia (100%) recordes", posicoes))
+        graficos.append(("Posição do nível entre seca (0%) e cheia (100%) recordes", posicoes, 100))
     return gerar_pdf(
         "Relatório de risco hidrológico — robô CIDC",
         linhas,

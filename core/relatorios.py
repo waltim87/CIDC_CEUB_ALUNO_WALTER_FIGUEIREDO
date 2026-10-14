@@ -31,9 +31,60 @@ def gerar_csv(linhas: Sequence[Mapping[str, Any]], colunas: Sequence[str]) -> by
     return ("\ufeff" + saida.getvalue()).encode("utf-8")
 
 
+_TROCAS = {
+    "\u2014": "-", "\u2013": "-", "\u2012": "-", "\u2212": "-",  # travessões e sinal de menos
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',  # aspas curvas
+    "\u2026": "...", "\u2022": "-", "\u00a0": " ",
+    "\u2192": "->", "\u2190": "<-", "\u2265": ">=", "\u2264": "<=", "\u2248": "~",
+    "\u2714": "ok", "\u2705": "ok", "\u2716": "x", "\u274c": "x", "\u26a0": "!",
+}
+
+
 def _latin1(texto: Any) -> str:
-    # A fonte padrão do PDF cobre Latin-1, suficiente para o português.
-    return str("" if texto is None else texto).encode("latin-1", "replace").decode("latin-1")
+    """Texto seguro para a fonte padrão do PDF (Latin-1, suficiente para o português).
+
+    Converte travessões, aspas curvas, setas e ✔/✖ para equivalentes e REMOVE emojis e
+    outros símbolos fora do Latin-1 (antes viravam "?").
+    """
+    bruto = str("" if texto is None else texto)
+    convertido = "".join(_TROCAS.get(c, c) for c in bruto)
+    seguro = "".join(c for c in convertido if ord(c) < 256)
+    # Remove espaços duplicados deixados pelos emojis removidos (mantém as quebras de linha).
+    return "\n".join(" ".join(parte.split()) for parte in seguro.split("\n"))
+
+
+def _tabela_pdf(pdf: Any, colunas: Sequence[str], linhas: Sequence[Mapping[str, Any]], tamanho: float = 7) -> None:
+    """Tabela com QUEBRA DE LINHA nas células (nada é cortado) e cabeçalho repetido por página."""
+    from fpdf.fonts import FontFace
+
+    def texto(valor: Any) -> str:
+        return _latin1("" if valor is None else valor)
+
+    # Largura proporcional ao conteúdo (limitada), para colunas de texto longo ganharem espaço.
+    pesos = []
+    for coluna in colunas:
+        valores = [texto(coluna)] + [texto(l.get(coluna)) for l in linhas[:200]]
+        maior = max(len(v) for v in valores)
+        # Pelo menos a maior palavra cabe inteira (evita "Tempest/ade").
+        maior_palavra = max((len(p) for v in valores for p in v.split()), default=0)
+        pesos.append(min(max(maior, maior_palavra + 1, 6), 60))
+    pdf.set_font("Helvetica", "", tamanho)
+    # Fundo branco nas linhas: sem isso a tabela herda a última cor de preenchimento
+    # usada no PDF (ex.: faixa laranja dos cartões de análise).
+    pdf.set_fill_color(255, 255, 255)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_draw_color(0, 0, 0)
+    with pdf.table(
+        cell_fill_mode="NONE", col_widths=tuple(pesos), text_align="LEFT", line_height=tamanho * 0.5, padding=0.8,
+        headings_style=FontFace(emphasis="BOLD", fill_color=(230, 236, 245)), repeat_headings=1,
+    ) as tabela:
+        cabecalho = tabela.row()
+        for coluna in colunas:
+            cabecalho.cell(texto(coluna))
+        for linha in linhas:
+            celulas = tabela.row()
+            for coluna in colunas:
+                celulas.cell(texto(linha.get(coluna)))
 
 
 def gerar_pdf(
@@ -43,12 +94,13 @@ def gerar_pdf(
     *,
     resumo: Mapping[str, Any] | None = None,
     colunas_detalhe: Sequence[str] | None = None,
-    graficos: Sequence[tuple[str, Mapping[str, float]]] | None = None,
+    graficos: Sequence[tuple[Any, ...]] | None = None,
     analises: Sequence[Mapping[str, Any]] | None = None,
 ) -> bytes:
     """PDF em paisagem: aviso, resumo, gráficos, análises do robô e tabela.
 
-    ``graficos``: lista de (título, {rótulo: valor}) desenhados como barras.
+    ``graficos``: lista de (título, {rótulo: valor}) ou (título, dados, escala_máxima) em barras;
+    use escala_máxima=100 para porcentagens (senão a barra escala pelo maior valor da lista).
     ``analises``: dicts com Município, sinal, texto e gerado_em (core/robo.py).
     """
     from fpdf import FPDF
@@ -73,23 +125,12 @@ def gerar_pdf(
                 new_x="LMARGIN", new_y="NEXT",
             )
         pdf.ln(2)
-    for titulo_grafico, dados in graficos or []:
-        _grafico_barras(pdf, titulo_grafico, dados)
+    for grafico in graficos or []:
+        _grafico_barras(pdf, grafico[0], grafico[1], grafico[2] if len(grafico) > 2 else None)
     if analises:
         _anexar_analises(pdf, analises)
         pdf.add_page()
-    largura = (pdf.w - pdf.l_margin - pdf.r_margin) / max(len(colunas), 1)
-    limite = max(int(largura / 1.7), 6)
-    pdf.set_font("Helvetica", "B", 8)
-    for coluna in colunas:
-        pdf.cell(largura, 6, _latin1(coluna)[:limite], border=1)
-    pdf.ln()
-    pdf.set_font("Helvetica", "", 8)
-    for linha in linhas:
-        for coluna in colunas:
-            valor = linha.get(coluna)
-            pdf.cell(largura, 6, _latin1(valor)[:limite], border=1)
-        pdf.ln()
+    _tabela_pdf(pdf, colunas, linhas, tamanho=8)
     if colunas_detalhe:
         _anexar_fichas(pdf, linhas, colunas_detalhe)
     return bytes(pdf.output())
@@ -115,7 +156,7 @@ def _cor(rotulo: str) -> tuple[int, int, int]:
     return COR_PADRAO
 
 
-def _grafico_barras(pdf: Any, titulo: str, dados: Mapping[str, float]) -> None:
+def _grafico_barras(pdf: Any, titulo: str, dados: Mapping[str, float], escala_maxima: float | None = None) -> None:
     """Barras horizontais desenhadas com primitivas do fpdf2 (sem dependências)."""
     itens = [(str(r), float(v)) for r, v in dados.items() if v is not None]
     if not itens:
@@ -125,7 +166,7 @@ def _grafico_barras(pdf: Any, titulo: str, dados: Mapping[str, float]) -> None:
         pdf.add_page()
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(0, 7, _latin1(titulo), new_x="LMARGIN", new_y="NEXT")
-    maximo = max(v for _, v in itens) or 1
+    maximo = escala_maxima or max(v for _, v in itens) or 1
     largura_rotulo = 60
     largura_util = pdf.w - pdf.l_margin - pdf.r_margin - largura_rotulo - 20
     pdf.set_font("Helvetica", "", 8)
@@ -133,7 +174,7 @@ def _grafico_barras(pdf: Any, titulo: str, dados: Mapping[str, float]) -> None:
         y = pdf.get_y()
         pdf.cell(largura_rotulo, altura_barra, _latin1(rotulo)[:40])
         pdf.set_fill_color(*_cor(rotulo))
-        largura = max(largura_util * valor / maximo, 0.5)
+        largura = max(largura_util * min(max(valor, 0), maximo) / maximo, 0.5)
         pdf.rect(pdf.l_margin + largura_rotulo, y + 0.8, largura, altura_barra - 1.6, style="F")
         pdf.set_xy(pdf.l_margin + largura_rotulo + largura + 2, y)
         pdf.cell(18, altura_barra, f"{valor:g}", new_x="LMARGIN", new_y="NEXT")
@@ -175,26 +216,21 @@ def _anexar_analises(pdf: Any, analises: Sequence[Mapping[str, Any]]) -> None:
 
 def _anexar_fichas(pdf: Any, linhas: Sequence[Mapping[str, Any]], colunas: Sequence[str]) -> None:
     """Uma ficha por município com todas as colunas do CSV, em 4 colunas de texto."""
-    por_linha = 4
-    largura = (pdf.w - pdf.l_margin - pdf.r_margin) / por_linha
-    limite = max(int(largura / 1.5), 10)
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 8, "Fichas por municipio (mesmos campos do CSV)", new_x="LMARGIN", new_y="NEXT")
     for linha in linhas:
-        if pdf.get_y() > pdf.h - 12 - 6 * (len(colunas) // por_linha + 3):
+        if pdf.get_y() > pdf.h - 40:
             pdf.add_page()
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_fill_color(230, 230, 230)
         cabecalho = f"{linha.get('Município', '')} - {linha.get('UF', '')}"
         pdf.cell(0, 6, _latin1(cabecalho), fill=True, new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 7)
-        for inicio in range(0, len(colunas), por_linha):
-            for coluna in colunas[inicio:inicio + por_linha]:
-                valor = linha.get(coluna)
-                texto = f"{coluna}: {'' if valor is None else valor}"
-                pdf.cell(largura, 5, _latin1(texto)[:limite])
-            pdf.ln()
+        texto = "  |  ".join(
+            f"{coluna}: {linha.get(coluna)}" for coluna in colunas if linha.get(coluna) not in (None, "")
+        )
+        pdf.multi_cell(0, 3.6, _latin1(texto), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
 
@@ -540,20 +576,7 @@ def gerar_pdf_secoes(
             continue
         colunas = list(linhas[0].keys())
         if len(colunas) <= max_colunas_tabela:
-            largura = largura_util / len(colunas)
-            limite = max(int(largura / 1.6), 6)
-            pdf.set_font("Helvetica", "B", 8)
-            for coluna in colunas:
-                pdf.cell(largura, 6, _latin1(coluna)[:limite], border=1)
-            pdf.ln()
-            pdf.set_font("Helvetica", "", 8)
-            for linha in linhas:
-                if pdf.get_y() > pdf.h - 16:
-                    pdf.add_page()
-                for coluna in colunas:
-                    valor = linha.get(coluna)
-                    pdf.cell(largura, 6, _latin1("" if valor is None else valor)[:limite], border=1)
-                pdf.ln()
+            _tabela_pdf(pdf, colunas, linhas, tamanho=7.5)
         else:
             for linha in linhas:
                 if pdf.get_y() > pdf.h - 30:
