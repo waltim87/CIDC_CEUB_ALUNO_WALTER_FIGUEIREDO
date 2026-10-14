@@ -349,3 +349,20 @@ modelo de texto fixo.
   execução do GitHub Actions, 14 dias) e pelo botão no painel.
 - Gráficos novos: régua de posição na faixa histórica e nível de cada estação com
   as linhas da seca e da cheia recordes.
+
+## Etapa 10 — 50 estações do Amazonas e cadastros nos menus
+
+- **Estações**: `scripts/inventario_estacoes_am.py` lista as estações telemétricas de rio
+  da ANA no AM e mantém só as que transmitem nível (49 em 27 municípios em 14/10/2026,
+  + Arumã-Jusante). Migration `202610140005` cadastra todas.
+- **Marcadores automáticos**: `python -m collectors.marcadores` (passo do GitHub Actions)
+  calcula cheia/seca recordes das estações que ainda não têm, até 15 por execução. Se o
+  serviço histórico da ANA estiver fora do ar, tenta de novo na execução seguinte.
+- **Robô**: até 40 textos de IA por execução, com 4 s entre chamadas (cota gratuita).
+- **Menus com cadastro** (`app/cadastros.py`), respeitando o RLS por perfil/município:
+  - Gestão municipal: comunidades, recursos, abrigos (cadastro e ocupação), plano de
+    contingência (réguas e rotas), infraestrutura crítica, situação oficial e tarefas.
+  - Saúde: unidades de saúde, estoque de medicamentos/oxigênio, famílias afetadas.
+  - Logística: pré-posicionamento (água, alimento, combustível, purificador), abrigos,
+    portos/captação/energia, rotas alternativas e assinaturas.
+  - Registro de campo: cadastro de comunidade quando não houver e resumo dos atendimentos.

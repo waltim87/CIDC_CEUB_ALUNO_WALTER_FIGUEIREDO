@@ -32,13 +32,59 @@ ana:
       vazao: Vazao
       chuva_mm: Chuva
       tendencia: null
-  # Estações do Purus no AM com nível transmitido (inventário ANA 03-04/10/2026).
+  # Estações de rio da ANA no AM que transmitiam nível em 14/10/2026
+  # (scripts/inventario_estacoes_am.py) + Arumã-Jusante (piloto do Purus).
   estacoes:
+    - nome: "TABATINGA"
+      codigo_oficial: "10100000"
+      municipio_id_ibge: "1304062"  # Tabatinga/AM
+    - nome: "PALMEIRAS DO JAVARI"
+      codigo_oficial: "10200000"
+      municipio_id_ibge: "1300201"  # Atalaia Do Norte/AM
+    - nome: "LADÁRIO - JUSANTE"
+      codigo_oficial: "10910000"
+      municipio_id_ibge: "1300201"  # Atalaia Do Norte/AM
+    - nome: "SÃO PAULO DE OLIVENÇA"
+      codigo_oficial: "11400000"
+      municipio_id_ibge: "1303908"  # São Paulo De Olivença/AM
+    - nome: "SANTO ANTÔNIO DO IÇÁ"
+      codigo_oficial: "11500000"
+      municipio_id_ibge: "1303700"  # Santo Antônio Do Içá/AM
+    - nome: "IPIXUNA"
+      codigo_oficial: "12520000"
+      municipio_id_ibge: "1301803"  # Ipixuna/AM
+    - nome: "ENVIRA"
+      codigo_oficial: "12680000"
+      municipio_id_ibge: "1301506"  # Envira/AM
+    - nome: "SANTOS DUMONT"
+      codigo_oficial: "12700000"
+      municipio_id_ibge: "1301951"  # Itamarati/AM
+    - nome: "VILA BITTENCOURT"
+      codigo_oficial: "12845000"
+      municipio_id_ibge: "1302108"  # Japurá/AM
+    - nome: "ACANAUI"
+      codigo_oficial: "12850000"
+      municipio_id_ibge: "1302108"  # Japurá/AM
+    - nome: "TEFÉ - MISSÕES"
+      codigo_oficial: "12900001"
+      municipio_id_ibge: "1304203"  # Tefé/AM
+    - nome: "SERINGAL MOREIRA"
+      codigo_oficial: "13100000"
+      municipio_id_ibge: "1301209"  # Coari/AM
+    - nome: "COARI"
+      codigo_oficial: "13150003"
+      municipio_id_ibge: "1301209"  # Coari/AM
     - nome: "SERINGAL DA CARIDADE"
       codigo_oficial: "13410000"
-      municipio_id_ibge: "1300706"  # Boca do Acre/AM
+      municipio_id_ibge: "1300706"  # Boca Do Acre/AM
+    - nome: "FLORIANO PEIXOTO"
+      codigo_oficial: "13650000"
+      municipio_id_ibge: "1300706"  # Boca Do Acre/AM
     - nome: "LÁBREA"
       codigo_oficial: "13870000"
+      municipio_id_ibge: "1302405"  # Lábrea/AM
+    - nome: "CRISTO"
+      codigo_oficial: "13885000"
       municipio_id_ibge: "1302405"  # Lábrea/AM
     - nome: "ARUMÃ - JUSANTE"
       codigo_oficial: "13962000"
@@ -46,6 +92,99 @@ ana:
     - nome: "BERURI"
       codigo_oficial: "13990000"
       municipio_id_ibge: "1300631"  # Beruri/AM
+    - nome: "MANACAPURU"
+      codigo_oficial: "14100000"
+      municipio_id_ibge: "1302504"  # Manacapuru/AM
+    - nome: "CUCUÍ"
+      codigo_oficial: "14110000"
+      municipio_id_ibge: "1303809"  # São Gabriel Da Cachoeira/AM
+    - nome: "TARAQUÁ"
+      codigo_oficial: "14280001"
+      municipio_id_ibge: "1303809"  # São Gabriel Da Cachoeira/AM
+    - nome: "CURICURIARI"
+      codigo_oficial: "14330000"
+      municipio_id_ibge: "1303809"  # São Gabriel Da Cachoeira/AM
+    - nome: "SERRINHA"
+      codigo_oficial: "14420000"
+      municipio_id_ibge: "1303601"  # Santa Izabel Do Rio Negro/AM
+    - nome: "BARCELOS"
+      codigo_oficial: "14480002"
+      municipio_id_ibge: "1300409"  # Barcelos/AM
+    - nome: "MOURA"
+      codigo_oficial: "14840000"
+      municipio_id_ibge: "1300409"  # Barcelos/AM
+    - nome: "MANAUS"
+      codigo_oficial: "14990000"
+      municipio_id_ibge: "1302603"  # Manaus/AM
+    - nome: "JATUARANA"
+      codigo_oficial: "15030000"
+      municipio_id_ibge: "1302603"  # Manaus/AM
+    - nome: "SÃO RAFAEL"
+      codigo_oficial: "15627320"
+      municipio_id_ibge: "1301704"  # Humaitá/AM
+    - nome: "MOANENSE"
+      codigo_oficial: "15627360"
+      municipio_id_ibge: "1301704"  # Humaitá/AM
+    - nome: "UHE SANTO ANTÔNIO HUMAITÁ"
+      codigo_oficial: "15629000"
+      municipio_id_ibge: "1301704"  # Humaitá/AM
+    - nome: "HUMAITÁ"
+      codigo_oficial: "15630000"
+      municipio_id_ibge: "1301704"  # Humaitá/AM
+    - nome: "CURUÇÁ"
+      codigo_oficial: "15700050"
+      municipio_id_ibge: "1302702"  # Manicoré/AM
+    - nome: "NOVO ARIPUANÃ"
+      codigo_oficial: "15850050"
+      municipio_id_ibge: "1302702"  # Manicoré/AM
+    - nome: "MACACO  PREGO"
+      codigo_oficial: "15850060"
+      municipio_id_ibge: "1302702"  # Manicoré/AM
+    - nome: "FAZENDA VISTA ALEGRE"
+      codigo_oficial: "15860000"
+      municipio_id_ibge: "1303304"  # Novo Aripuanã/AM
+    - nome: "SANTARÉM SUCUNDURI"
+      codigo_oficial: "15910000"
+      municipio_id_ibge: "1300144"  # Apuí/AM
+    - nome: "URUCURITUBA"
+      codigo_oficial: "15960060"
+      municipio_id_ibge: "1300300"  # Autazes/AM
+    - nome: "UHE PITINGA MONTANTE"
+      codigo_oficial: "16018000"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "UHE PITINGA SERRA"
+      codigo_oficial: "16019000"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "UHE PITINGA BARRAMENTO"
+      codigo_oficial: "16020000"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "UHE PITINGA JUSANTE"
+      codigo_oficial: "16020100"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "UHE BALBINA RIO PITINGA"
+      codigo_oficial: "16020200"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "ITACOATIARA"
+      codigo_oficial: "16030000"
+      municipio_id_ibge: "1301902"  # Itacoatiara/AM
+    - nome: "UHE BALBINA MONTANTE"
+      codigo_oficial: "16062000"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "UHE BALBINA BARRAMENTO"
+      codigo_oficial: "16070980"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "UHE BALBINA JUSANTE"
+      codigo_oficial: "16090000"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "CACHOEIRA MORENA"
+      codigo_oficial: "16100000"
+      municipio_id_ibge: "1303536"  # Presidente Figueiredo/AM
+    - nome: "PARINTINS"
+      codigo_oficial: "16350002"
+      municipio_id_ibge: "1303403"  # Parintins/AM
+    - nome: "BARRA DO SÃO MANUEL"
+      codigo_oficial: "17430000"
+      municipio_id_ibge: "1300805"  # Borba/AM
 
 inpe:
   nome: INPE Queimadas

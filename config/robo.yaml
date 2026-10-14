@@ -39,6 +39,8 @@ ia:
   # Gemini, camada gratuita. Sem GEMINI_API_KEY, usa o modelo de texto fixo.
   modelo: gemini-flash-lite-latest
   variavel_chave: GEMINI_API_KEY
-  # Limite por execução para ficar folgado na cota gratuita.
-  max_chamadas_por_execucao: 20
+  # Limite por execução e pausa entre chamadas, para ficar dentro da cota
+  # gratuita (limite de requisições por minuto). 27 municípios ~ 2 min.
+  max_chamadas_por_execucao: 40
+  intervalo_segundos: 4
   timeout_segundos: 30

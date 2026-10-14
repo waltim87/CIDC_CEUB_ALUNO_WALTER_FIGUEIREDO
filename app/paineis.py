@@ -19,6 +19,14 @@ from app.comum import (
     exigir_perfil,
     mostrar_aviso,
 )
+from app.cadastros import (
+    bloco_abrigos,
+    bloco_comunidades,
+    bloco_infraestrutura,
+    bloco_plano,
+    bloco_recursos,
+    bloco_situacao,
+)
 from app.visual import (
     AVISO_ROBO,
     aplicar_estilo,
@@ -535,29 +543,24 @@ def renderizar_coordenador() -> None:
             cartao_analise(f"{municipio['nome']}/{municipio['uf']}", analise)
         else:
             st.info("Sem análise do robô para este município (sem estação monitorada ou ainda não gerada).")
-        for tabela, colunas in (
-            ("comunidades", "id,nome,populacao_estimada,acesso_principal"),
-            ("recursos", "tipo,quantidade,atualizado_em"),
-            ("abrigos", "nome,capacidade,ocupacao"),
-            ("planos_contingencia", "atualizado_em,possui_reguas,rotas_alternativas"),
-        ):
-            resultado = (
-                cliente.table(tabela)
-                .select(colunas)
-                .eq("municipio_id", municipio_id)
-                .limit(200)
-                .execute()
-            )
-            st.subheader(
-                {
-                    "comunidades": "Comunidades",
-                    "recursos": "Recursos",
-                    "abrigos": "Abrigos",
-                    "planos_contingencia": "Plano de contingência",
-                }[tabela]
-            )
-            st.dataframe(resultado.data or [], hide_index=True, width="stretch")
-        _renderizar_acoes(cliente, municipio_id)
+        abas = st.tabs(
+            ["🏘️ Comunidades", "📦 Recursos", "🏠 Abrigos", "📋 Plano", "🏥 Infraestrutura",
+             "📢 Situação oficial", "✅ Tarefas por eixo"]
+        )
+        with abas[0]:
+            bloco_comunidades(cliente, municipio_id)
+        with abas[1]:
+            bloco_recursos(cliente, municipio_id)
+        with abas[2]:
+            bloco_abrigos(cliente, municipio_id)
+        with abas[3]:
+            bloco_plano(cliente, municipio_id)
+        with abas[4]:
+            bloco_infraestrutura(cliente, municipio_id)
+        with abas[5]:
+            bloco_situacao(cliente, municipio_id)
+        with abas[6]:
+            _renderizar_acoes(cliente, municipio_id)
     except Exception as erro:
         st.error(f"Não foi possível carregar a gestão municipal: {erro}")
 
@@ -773,9 +776,13 @@ def renderizar_agente_campo() -> None:
             or []
         )
         if not comunidades:
-            st.info("Nenhuma comunidade cadastrada para este município.")
+            st.info(
+                "Nenhuma comunidade cadastrada para este município. Cadastre a primeira abaixo "
+                "(coordenação municipal ou administração)."
+            )
+            bloco_comunidades(cliente, municipio_id)
             return
-        with st.form("registro-familias"):
+        with st.form("registro-familias", clear_on_submit=True):
             comunidade_id = st.selectbox(
                 "Comunidade",
                 [item["id"] for item in comunidades],
@@ -807,8 +814,63 @@ def renderizar_agente_campo() -> None:
             if not resultado.data:
                 raise RuntimeError("O Supabase não confirmou o registro")
             st.success("Registro salvo com auditoria.")
+        _resumo_afetados(cliente, municipio_id)
+        with st.expander("Cadastrar nova comunidade"):
+            bloco_comunidades(cliente, municipio_id)
     except Exception as erro:
         st.error(f"Não foi possível registrar o atendimento: {erro}")
+
+
+def _resumo_afetados(cliente: Any, municipio_id: str) -> None:
+    """Totais e últimos registros de famílias afetadas nas comunidades do município."""
+    comunidades = {
+        c["id"]: c["nome"]
+        for c in (
+            cliente.table("comunidades").select("id,nome").eq("municipio_id", municipio_id)
+            .execute().data or []
+        )
+    }
+    if not comunidades:
+        st.info("Sem comunidades cadastradas neste município.")
+        return
+    registros = (
+        cliente.table("pessoas_afetadas")
+        .select("comunidade_id,familias,pessoas,necessidades,data")
+        .in_("comunidade_id", list(comunidades))
+        .order("data", desc=True)
+        .limit(200)
+        .execute()
+        .data
+        or []
+    )
+    st.subheader("Famílias e pessoas afetadas")
+    if not registros:
+        st.info("Nenhum registro de campo ainda.")
+        return
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Registros", len(registros))
+    c2.metric("Famílias", sum(r["familias"] for r in registros))
+    c3.metric("Pessoas", sum(r["pessoas"] for r in registros))
+    necessidades: dict[str, int] = {}
+    for registro in registros:
+        for item in registro.get("necessidades") or []:
+            necessidades[item] = necessidades.get(item, 0) + 1
+    if necessidades:
+        grafico_barras(dict(sorted(necessidades.items(), key=lambda i: -i[1])), "Necessidades mais citadas")
+    st.dataframe(
+        [
+            {
+                "Data (UTC)": str(r["data"])[:16].replace("T", " "),
+                "Comunidade": comunidades.get(r["comunidade_id"], r["comunidade_id"]),
+                "Famílias": r["familias"],
+                "Pessoas": r["pessoas"],
+                "Necessidades": ", ".join(r.get("necessidades") or []),
+            }
+            for r in registros[:50]
+        ],
+        hide_index=True,
+        width="stretch",
+    )
 
 
 def renderizar_saude() -> None:
@@ -827,25 +889,16 @@ def renderizar_saude() -> None:
         if not municipio_id:
             st.info("Associe um município ao perfil.")
             return
-        unidades = (
-            cliente.table("infraestrutura")
-            .select("tipo,nome,municipio_id")
-            .eq("municipio_id", municipio_id)
-            .eq("tipo", "ubs")
-            .execute()
+        aba_unidades, aba_estoque, aba_afetados = st.tabs(
+            ["🏥 Unidades de saúde", "💊 Medicamentos e oxigênio", "👪 Famílias afetadas"]
         )
-        recursos = (
-            cliente.table("recursos")
-            .select("tipo,quantidade,atualizado_em")
-            .eq("municipio_id", municipio_id)
-            .in_("tipo", ["medicamento", "oxigenio"])
-            .execute()
-        )
-        st.subheader("Unidades de saúde")
-        st.dataframe(unidades.data or [], hide_index=True, width="stretch")
-        st.subheader("Estoque de medicamentos e oxigênio")
-        st.dataframe(recursos.data or [], hide_index=True, width="stretch")
-        st.caption("Rotas médicas ainda dependem de dados oficiais de infraestrutura e logística.")
+        with aba_unidades:
+            bloco_infraestrutura(cliente, municipio_id, ["ubs"])
+        with aba_estoque:
+            bloco_recursos(cliente, municipio_id, ["medicamento", "oxigenio"])
+        with aba_afetados:
+            _resumo_afetados(cliente, municipio_id)
+        st.caption("Rotas de evacuação médica: registre-as no plano de contingência (Gestão municipal).")
     except Exception as erro:
         st.error(f"Não foi possível carregar o painel de saúde: {erro}")
 
@@ -866,25 +919,20 @@ def renderizar_logistica() -> None:
         if not municipio_id:
             st.info("Associe um município ao perfil.")
             return
-        recursos = (
-            cliente.table("recursos")
-            .select("tipo,quantidade,atualizado_em")
-            .eq("municipio_id", municipio_id)
-            .order("tipo")
-            .execute()
+        aba_estoque, aba_abrigos, aba_infra, aba_rotas, aba_assinaturas = st.tabs(
+            ["📦 Pré-posicionamento", "🏠 Abrigos", "⚓ Portos, captação e energia",
+             "🛶 Rotas alternativas", "🔔 Assinaturas de alertas"]
         )
-        abrigos = (
-            cliente.table("abrigos")
-            .select("nome,capacidade,ocupacao")
-            .eq("municipio_id", municipio_id)
-            .execute()
-        )
-        st.subheader("Estoque informado")
-        st.dataframe(recursos.data or [], hide_index=True, width="stretch")
-        st.subheader("Capacidade dos abrigos")
-        st.dataframe(abrigos.data or [], hide_index=True, width="stretch")
-        st.caption("Rotas fluviais/terrestres alternativas ainda precisam ser confirmadas localmente.")
-        _renderizar_assinaturas(cliente, perfil)
+        with aba_estoque:
+            bloco_recursos(cliente, municipio_id, ["agua", "alimento", "combustivel", "purificador"])
+        with aba_abrigos:
+            bloco_abrigos(cliente, municipio_id)
+        with aba_infra:
+            bloco_infraestrutura(cliente, municipio_id, ["porto", "captacao", "energia"])
+        with aba_rotas:
+            bloco_plano(cliente, municipio_id)
+        with aba_assinaturas:
+            _renderizar_assinaturas(cliente, perfil)
     except Exception as erro:
         st.error(f"Não foi possível carregar logística: {erro}")
 

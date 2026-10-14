@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -375,6 +376,7 @@ def executar_robo(
     agora: datetime | None = None,
     cfg: dict[str, Any] | None = None,
     gerar_texto: Callable[..., tuple[str, str, str | None]] = llm.gerar_texto,
+    pausa: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     agora = agora or datetime.now(timezone.utc)
     cfg = cfg or carregar_config()
@@ -396,6 +398,8 @@ def executar_robo(
             resultado = consolidar_municipio(municipio, analises)
             texto_fixo = texto_modelo_fixo(resultado)
             if chamadas_ia < cfg["ia"]["max_chamadas_por_execucao"]:
+                if chamadas_ia and os.environ.get(cfg["ia"]["variavel_chave"]):
+                    pausa(cfg["ia"].get("intervalo_segundos", 0))
                 chamadas_ia += 1
                 texto, metodo, modelo = gerar_texto(
                     fatos_para_ia(resultado),
