@@ -31,6 +31,8 @@ from app.paineis import (
 )
 from app.voluntarios import renderizar_meu_cadastro, renderizar_relatos
 from app.meteorologia import renderizar_meteorologia
+from app.familias import renderizar_familias, usuario_coordena_abrigo
+from app.permissoes import renderizar_permissoes
 
 st.set_page_config(page_title="CIDC | Defesa Civil", page_icon="🌧️", layout="wide")
 
@@ -119,6 +121,12 @@ else:
         paginas.append(
             st.Page(renderizar_pesquisador, title="Dados e metodologia", icon="📚")
         )
+    if nome_perfil in {"administrador", "coordenador_municipal", "saude_assistencia"} or usuario_coordena_abrigo(
+        cliente, perfil["id"]
+    ):
+        paginas.append(st.Page(renderizar_familias, title="Famílias abrigadas", icon="👪"))
+    if nome_perfil in {"administrador", "coordenador_municipal"}:
+        paginas.append(st.Page(renderizar_permissoes, title="Usuários e permissões", icon="🔑"))
     if nome_perfil == "administrador":
         paginas.append(
             st.Page(renderizar_administracao, title="Administração", icon="⚙️")

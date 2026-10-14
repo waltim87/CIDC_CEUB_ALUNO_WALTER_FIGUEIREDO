@@ -398,3 +398,17 @@ modelo de texto fixo.
   estação, mas com aviso, também são analisados; a IA prioriza os de maior risco.
 - Tela **Meteorologia** (avisos com cores oficiais, mapa, previsão, chuva prevista/observada,
   relatório) e aviso + previsão na página pública. Migration `202610140008`.
+
+## Etapa 13 — famílias abrigadas, desaparecidos, coordenadores de abrigo e permissões
+
+- **Famílias abrigadas** (migration `202610140009`): responsável e membros com nome completo,
+  CPF validado (dígitos verificadores), parentesco, situação do imóvel, necessidades e **fotos**
+  (bucket privado `fotos-familias`). **Desaparecidos**: último dia e local em que a pessoa foi
+  vista; botão "encontrado(a)". Ocupação do abrigo atualizada automaticamente.
+- **LGPD**: só acessam o coordenador do abrigo, a coordenação municipal, a assistência social do
+  município e o administrador. Voluntários não leem estes dados; relatórios mascaram o CPF.
+- **Coordenadores de abrigo**: qualquer conta (inclusive voluntário) pode ser designada a um abrigo.
+- **Usuários e permissões**: administrador atribui perfil e município; coordenação designa
+  coordenadores de abrigo; matriz do que cada perfil pode fazer.
+- **Dados de teste**: `db/testes/dados_teste_abrigos_familias_relatos.sql` (5 abrigos, 100 famílias,
+  desaparecidos, 10 relatos, tudo marcado TESTE); apagar com `db/testes/limpar_dados_teste.sql`.
