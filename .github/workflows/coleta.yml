@@ -36,10 +36,24 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m core.automatico
       - name: Robo de analise de risco (IA gratuita ou modelo fixo)
-        # Falha do robô não invalida a coleta já gravada.
-        continue-on-error: true
+        # A coleta já foi gravada nas etapas anteriores; uma falha aqui fica
+        # vermelha de propósito, para não esconder problemas.
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -m core.robo
+      - name: Relatorio PDF do robo
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m core.relatorio_robo
+      - name: Anexar relatorio a execucao
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-risco
+          path: relatorios/*.pdf
+          retention-days: 14
+          if-no-files-found: ignore

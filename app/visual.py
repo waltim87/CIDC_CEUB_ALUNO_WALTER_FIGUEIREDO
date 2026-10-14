@@ -324,7 +324,7 @@ def grafico_barras(dados: dict[str, int], titulo: str, cores: dict[str, str] | N
             color=alt.Color("Categoria:N", scale=escala, legend=None),
             tooltip=["Categoria", "Quantidade"],
         )
-        .properties(height=max(140, 42 * len(dados))),
+        .properties(height=alt.Step(34)),
         width="stretch",
     )
 
@@ -403,6 +403,140 @@ def grafico_variacao(analises: dict[str, dict[str, Any]], nomes: dict[str, str])
             color=alt.Color("Sinal:N", scale=escala),
             tooltip=["Estação", "Variação 24 h (cm)", "Sinal"],
         )
-        .properties(height=max(160, 46 * len(linhas))),
+        .properties(height=alt.Step(40)),
+        width="stretch",
+    )
+
+
+def _estacoes_das_analises(analises: dict[str, dict[str, Any]], nomes: dict[str, str]) -> list[dict[str, Any]]:
+    return [
+        {**e, "municipio": nomes.get(codigo, codigo)}
+        for codigo, analise in analises.items()
+        for e in analise.get("estacoes_json") or []
+    ]
+
+
+def grafico_faixa_historica(analises: dict[str, dict[str, Any]], nomes: dict[str, str]) -> None:
+    """Régua 0-100%: posição do nível entre a seca (0%) e a cheia (100%) recordes."""
+    import altair as alt
+    import pandas as pd
+
+    estacoes = [e for e in _estacoes_das_analises(analises, nomes) if e.get("posicao_pct") is not None]
+    if not estacoes:
+        st.info(
+            "Sem marcadores históricos de cheia/seca nas estações "
+            "(aplique a migration 202610140004)."
+        )
+        return
+    tabela = pd.DataFrame(
+        {
+            "Estação": f"{e['estacao']} — {e['municipio']}",
+            "Posição (%)": max(min(float(e["posicao_pct"]), 105), -5),
+            "Posição real (%)": e["posicao_pct"],
+            "Nível (cm)": e.get("nivel_cm"),
+            "Seca recorde": f"{e.get('seca_historica_cm'):g} cm ({str(e.get('seca_historica_data'))[:10]})",
+            "Cheia recorde": f"{e.get('cheia_historica_cm'):g} cm ({str(e.get('cheia_historica_data'))[:10]})",
+        }
+        for e in estacoes
+    )
+    faixas = [
+        (-5, 10, "Alerta (perto da seca recorde)"),
+        (10, 20, "Atenção"),
+        (20, 80, "Faixa usual"),
+        (80, 90, "Atenção "),
+        (90, 105, "Alerta (perto da cheia recorde)"),
+    ]
+    # Uma faixa colorida por estação, para cada linha ter seu próprio fundo.
+    zonas = pd.DataFrame(
+        {"Estação": estacao, "ini": ini, "fim": fim, "zona": zona}
+        for estacao in tabela["Estação"]
+        for ini, fim, zona in faixas
+    )
+    cores_zona = alt.Scale(
+        domain=[zona for _, _, zona in faixas],
+        range=["#f6c7b6", "#fbe7a6", "#d7efd9", "#fbe7a6", "#f6c7b6"],
+    )
+    fundo = (
+        alt.Chart(zonas)
+        .mark_rect(opacity=0.8)
+        .encode(
+            x=alt.X("ini:Q", title="Posição na faixa histórica (%)", scale=alt.Scale(domain=[-5, 105])),
+            x2="fim:Q",
+            y=alt.Y("Estação:N", title=None, axis=alt.Axis(labelLimit=260, labelOverlap=False)),
+            color=alt.Color("zona:N", scale=cores_zona, legend=alt.Legend(title=None, orient="bottom", columns=3)),
+        )
+    )
+    pontos = (
+        alt.Chart(tabela)
+        .mark_point(filled=True, size=260, shape="diamond", color="#1d2733")
+        .encode(
+            x="Posição (%):Q",
+            y=alt.Y("Estação:N", title=None, axis=alt.Axis(labelLimit=260, labelOverlap=False)),
+            tooltip=["Estação", "Posição real (%)", "Nível (cm)", "Seca recorde", "Cheia recorde"],
+        )
+    )
+    rotulos = pontos.mark_text(dy=-14, fontSize=12, fontWeight="bold").encode(
+        text=alt.Text("Posição real (%):Q", format=".0f")
+    )
+    st.altair_chart(
+        (fundo + pontos + rotulos)
+        .properties(
+            title="Nível atual entre a seca (0%) e a cheia (100%) recordes — ANA 1990+",
+            height=alt.Step(52),
+        ),
+        width="stretch",
+    )
+    st.caption(
+        "Marcadores: série histórica oficial da ANA (HidroSerieHistorica, 1990 em diante, "
+        "régua conferida com a telemetria). Perto de qualquer extremo, o robô eleva o sinal "
+        "e cria rascunho de alerta para revisão humana."
+    )
+
+
+def grafico_estacao_marcadores(
+    series: list[dict[str, Any]], analises: dict[str, dict[str, Any]], nomes: dict[str, str]
+) -> None:
+    """Nível de uma estação com linhas da seca e da cheia recordes."""
+    import altair as alt
+    import pandas as pd
+
+    estacoes = {
+        f"{e['estacao']} ({e['codigo']})": e for e in _estacoes_das_analises(analises, nomes)
+    }
+    disponiveis = sorted({s["Estação"] for s in series} & set(estacoes)) or sorted({s["Estação"] for s in series})
+    if not disponiveis:
+        return
+    escolhida = st.selectbox("Estação", disponiveis, key="estacao_marcadores")
+    dados = pd.DataFrame([s for s in series if s["Estação"] == escolhida])
+    dados["Data/hora"] = pd.to_datetime(dados["Data/hora"], utc=True).dt.tz_convert("America/Manaus")
+    camadas = [
+        alt.Chart(dados)
+        .mark_line(point=alt.OverlayMarkDef(size=14), color="#2f6db5")
+        .encode(
+            x=alt.X("Data/hora:T", title="Horário de Manaus"),
+            y=alt.Y("Nível (cm):Q", scale=alt.Scale(zero=False)),
+            tooltip=[alt.Tooltip("Data/hora:T", format="%d/%m %H:%M"), "Nível (cm)"],
+        )
+    ]
+    e = estacoes.get(escolhida, {})
+    referencias = []
+    if e.get("seca_historica_cm") is not None:
+        referencias.append({"nivel": e["seca_historica_cm"], "rotulo": f"Seca recorde {e['seca_historica_cm']:g} cm ({str(e.get('seca_historica_data'))[:10]})", "cor": "#d9480f"})
+    if e.get("cheia_historica_cm") is not None:
+        referencias.append({"nivel": e["cheia_historica_cm"], "rotulo": f"Cheia recorde {e['cheia_historica_cm']:g} cm ({str(e.get('cheia_historica_data'))[:10]})", "cor": "#1c3faa"})
+    if referencias:
+        ref = pd.DataFrame(referencias)
+        camadas.append(
+            alt.Chart(ref).mark_rule(strokeDash=[6, 4], strokeWidth=2).encode(
+                y="nivel:Q", color=alt.Color("cor:N", scale=None)
+            )
+        )
+        camadas.append(
+            alt.Chart(ref).mark_text(align="left", dx=4, dy=-6, fontSize=11).encode(
+                y="nivel:Q", text="rotulo:N", color=alt.Color("cor:N", scale=None), x=alt.value(4)
+            )
+        )
+    st.altair_chart(
+        alt.layer(*camadas).properties(title=f"{escolhida}: nível x marcadores históricos", height=360),
         width="stretch",
     )

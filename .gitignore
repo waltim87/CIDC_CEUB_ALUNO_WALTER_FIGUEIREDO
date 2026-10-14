@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Relatórios PDF gerados pelo robô (anexados ao GitHub Actions)
+relatorios/

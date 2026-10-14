@@ -21,8 +21,18 @@ variacao_24h_cm:
 
 # Proximidade das cotas oficiais (quando cadastradas em public.estacoes).
 fracao_cota_atencao: 0.9
-# Proximidade dos extremos históricos (quando cadastrados).
-margem_extremo_historico: 0.05
+# Posição do nível na faixa entre a seca (0%) e a cheia (100%) recordes da
+# estação (marcadores ANA 1990+, migration 202610140004). Nível perto de
+# QUALQUER um dos extremos eleva o sinal; no recorde ou além dele: "alto".
+faixa_historica_pct:
+  atencao: 20
+  alerta: 10
+
+# Rascunho de alerta criado automaticamente (sempre exige aprovação humana).
+alerta_automatico:
+  sinais: [alerta, alto]
+  # Não repete o mesmo alerta para o município dentro desta janela.
+  janela_horas: 24
 
 ia:
   # Gemini, camada gratuita. Sem GEMINI_API_KEY, usa o modelo de texto fixo.

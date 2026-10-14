@@ -329,3 +329,20 @@ repositório público, Supabase Free, Streamlit Community Cloud.
 <https://aistudio.google.com/apikey> e cadastre-a em GitHub → Settings → Secrets
 and variables → Actions como `GEMINI_API_KEY`. Sem ela, o robô funciona com o
 modelo de texto fixo.
+
+## Etapa 9 — marcadores históricos oficiais, alerta automático e relatório
+
+- **Marcadores de cheia e seca** de cada estação vêm da série oficial da ANA
+  (`HidroSerieHistorica`), calculados por `scripts/extremos_historicos.py`:
+  período de 1990 em diante, consistido preferido ao bruto, picos isolados
+  (> 150 cm em relação aos vizinhos) descartados e régua conferida com a
+  telemetria (diferença ≤ 10 cm). Aplicados pela migration `202610140004`.
+- O robô mede a **posição do nível entre a seca (0%) e a cheia (100%) recordes**:
+  até 20% de qualquer extremo → Atenção; até 10% → Alerta; no recorde ou além → Alto
+  (`config/robo.yaml`, hipóteses sem validação oficial).
+- Sinal Alerta ou Alto cria **rascunho de alerta** (sem repetir em 24 h), que só é
+  enviado após aprovação humana no painel de revisão.
+- **Relatório PDF** gerado a cada execução (anexo "relatorio-risco" na página da
+  execução do GitHub Actions, 14 dias) e pelo botão no painel.
+- Gráficos novos: régua de posição na faixa histórica e nível de cada estação com
+  as linhas da seca e da cheia recordes.

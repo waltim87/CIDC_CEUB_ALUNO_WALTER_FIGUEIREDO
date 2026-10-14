@@ -91,6 +91,11 @@ def analisar_estacao(
         "direcao": None,
         "sinal": "sem_dados",
         "motivos": [],
+        "posicao_pct": None,
+        "seca_historica_cm": estacao.get("seca_historica_cm"),
+        "seca_historica_data": estacao.get("seca_historica_data"),
+        "cheia_historica_cm": estacao.get("cheia_historica_cm"),
+        "cheia_historica_data": estacao.get("cheia_historica_data"),
     }
     if not serie:
         base["motivos"].append("sem leitura de nível na janela analisada")
@@ -138,18 +143,51 @@ def analisar_estacao(
         sinal = _maior(sinal, "atencao")
         base["motivos"].append(f"nível próximo da cota de alerta ({cota_alerta} cm)")
 
-    margem = cfg["margem_extremo_historico"]
-    seca = estacao.get("seca_historica_cm")
-    cheia = estacao.get("cheia_historica_cm")
-    if seca is not None and nivel <= float(seca) * (1 + margem):
-        sinal = _maior(sinal, "alerta")
-        base["motivos"].append(f"nível perto da seca histórica ({seca} cm)")
-    if cheia is not None and nivel >= float(cheia) * (1 - margem):
-        sinal = _maior(sinal, "alerta")
-        base["motivos"].append(f"nível perto da cheia histórica ({cheia} cm)")
-
+    sinal = _maior(sinal, _avaliar_faixa_historica(base, estacao, nivel, cfg))
     base["sinal"] = sinal
     return base
+
+
+def _data_br(valor: Any) -> str:
+    texto = str(valor or "")
+    return f"{texto[8:10]}/{texto[5:7]}/{texto[:4]}" if len(texto) >= 10 else texto
+
+
+def _avaliar_faixa_historica(
+    base: dict[str, Any], estacao: dict[str, Any], nivel: float, cfg: dict[str, Any]
+) -> str:
+    """Posição entre seca (0%) e cheia (100%) recordes; perto de qualquer extremo eleva o sinal."""
+    seca, cheia = estacao.get("seca_historica_cm"), estacao.get("cheia_historica_cm")
+    base.update(
+        seca_historica_cm=float(seca) if seca is not None else None,
+        seca_historica_data=estacao.get("seca_historica_data"),
+        cheia_historica_cm=float(cheia) if cheia is not None else None,
+        cheia_historica_data=estacao.get("cheia_historica_data"),
+        posicao_pct=None,
+    )
+    if seca is None or cheia is None or float(cheia) <= float(seca):
+        return "normal"
+    seca, cheia = float(seca), float(cheia)
+    posicao = round((nivel - seca) / (cheia - seca) * 100, 1)
+    base["posicao_pct"] = posicao
+    faixa = cfg["faixa_historica_pct"]
+    if posicao <= 50:
+        extremo, valor, data, distancia = "seca", seca, estacao.get("seca_historica_data"), posicao
+    else:
+        extremo, valor, data, distancia = "cheia", cheia, estacao.get("cheia_historica_data"), 100 - posicao
+    referencia = f"{extremo} recorde de {valor:g} cm em {_data_br(data)}"
+    if distancia <= 0:
+        base["motivos"].append(
+            f"nível {'abaixo' if extremo == 'seca' else 'acima'} da {referencia}"
+        )
+        return "alto"
+    if distancia <= faixa["alerta"]:
+        base["motivos"].append(f"nível a {distancia:g}% da faixa histórica da {referencia}")
+        return "alerta"
+    if distancia <= faixa["atencao"]:
+        base["motivos"].append(f"nível a {distancia:g}% da faixa histórica da {referencia}")
+        return "atencao"
+    return "normal"
 
 
 def consolidar_municipio(
@@ -198,6 +236,13 @@ def texto_modelo_fixo(resultado: dict[str, Any]) -> str:
                 f", {ROTULOS_DIRECAO[estacao['direcao']]} "
                 f"({estacao['variacao_24h_cm']:+} cm projetados em 24 h)"
             )
+        if estacao.get("posicao_pct") is not None:
+            trecho += (
+                f"; posição {estacao['posicao_pct']}% entre a seca recorde "
+                f"({estacao['seca_historica_cm']:g} cm, {_data_br(estacao['seca_historica_data'])}) "
+                f"e a cheia recorde ({estacao['cheia_historica_cm']:g} cm, "
+                f"{_data_br(estacao['cheia_historica_data'])})"
+            )
         partes.append(trecho + ".")
     if resultado.get("populacao"):
         partes.append(f"População do município: {resultado['populacao']} pessoas (IBGE 2022).")
@@ -218,24 +263,81 @@ def fatos_para_ia(resultado: dict[str, Any]) -> dict[str, Any]:
                 "nivel_cm": e["nivel_cm"],
                 "variacao_24h_cm": e["variacao_24h_cm"],
                 "direcao": ROTULOS_DIRECAO.get(e["direcao"] or "", None),
+                "posicao_pct_entre_seca_e_cheia_recordes": e.get("posicao_pct"),
+                "seca_recorde_cm": e.get("seca_historica_cm"),
+                "seca_recorde_data": _data_br(e.get("seca_historica_data")),
+                "cheia_recorde_cm": e.get("cheia_historica_cm"),
+                "cheia_recorde_data": _data_br(e.get("cheia_historica_data")),
             }
             for e in resultado["estacoes"]
         ],
     }
 
 
-def _buscar_dados(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> tuple[list, dict, dict]:
-    estacoes = (
-        cliente.table("estacoes")
-        .select(
-            "id,codigo_oficial,nome,rio,municipio_id,latitude,longitude,cota_alerta,cota_emergencia,"
-            "cheia_historica_cm,seca_historica_cm"
+COLUNAS_ESTACAO = "id,codigo_oficial,nome,rio,municipio_id,latitude,longitude,cota_alerta,cota_emergencia"
+COLUNAS_HISTORICO = (
+    "cheia_historica_cm,cheia_historica_data,seca_historica_cm,seca_historica_data,historico_fonte"
+)
+
+
+def _ler_estacoes(cliente: Any) -> list[dict[str, Any]]:
+    """Estações com código oficial; sem as colunas de marcadores, segue sem eles."""
+    try:
+        consulta = cliente.table("estacoes").select(f"{COLUNAS_ESTACAO},{COLUNAS_HISTORICO}")
+        return consulta.not_.is_("codigo_oficial", "null").execute().data or []
+    except Exception:
+        LOGGER.warning(
+            "Marcadores históricos indisponíveis (aplique a migration 202610140004); "
+            "seguindo sem eles", exc_info=True,
         )
-        .not_.is_("codigo_oficial", "null")
+        consulta = cliente.table("estacoes").select(COLUNAS_ESTACAO)
+        return consulta.not_.is_("codigo_oficial", "null").execute().data or []
+
+
+def _criar_alerta_rascunho(
+    cliente: Any,
+    *,
+    municipio_id: str,
+    sinal: str,
+    texto: str,
+    analise_id: str | None,
+    agora: datetime,
+    cfg: dict[str, Any],
+) -> bool:
+    """Rascunho de alerta para revisão humana; não repete dentro da janela configurada."""
+    regra = cfg["alerta_automatico"]
+    if sinal not in regra["sinais"]:
+        return False
+    classe = ROTULOS_SINAL[sinal]
+    desde = (agora - timedelta(hours=regra["janela_horas"])).isoformat()
+    existentes = (
+        cliente.table("alertas")
+        .select("id")
+        .eq("municipio_id", municipio_id)
+        .eq("classe", classe)
+        .in_("status", ["rascunho", "aprovado", "enviado"])
+        .gte("criado_em", desde)
+        .limit(1)
         .execute()
         .data
-        or []
     )
+    if existentes:
+        return False
+    cliente.table("alertas").insert(
+        {
+            "municipio_id": municipio_id,
+            "classe": classe,
+            "texto": texto,
+            "canal": None,
+            "status": "rascunho",
+            "analise_id": analise_id,
+        }
+    ).execute()
+    return True
+
+
+def _buscar_dados(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> tuple[list, dict, dict]:
+    estacoes = _ler_estacoes(cliente)
     municipios = {
         m["id_ibge"].strip(): m
         for m in (
@@ -286,7 +388,7 @@ def executar_robo(
                 analisar_estacao(estacao, leituras.get(estacao["id"], []), cfg, agora=agora)
             )
 
-    resumo = {"municipios": 0, "ia": 0, "modelo_fixo": 0, "erros": 0}
+    resumo = {"municipios": 0, "ia": 0, "modelo_fixo": 0, "alertas": 0, "erros": 0}
     chamadas_ia = 0
     for municipio_id, analises in sorted(por_municipio.items()):
         try:
@@ -304,7 +406,7 @@ def executar_robo(
                 )
             else:
                 texto, metodo, modelo = texto_fixo, "modelo_fixo", None
-            cliente.table("analises_risco").insert(
+            resposta = cliente.table("analises_risco").insert(
                 {
                     "municipio_id": municipio_id,
                     "gerado_em": agora.isoformat(),
@@ -325,6 +427,17 @@ def executar_robo(
             ).execute()
             resumo["municipios"] += 1
             resumo[metodo] += 1
+            analise_id = ((getattr(resposta, "data", None) or [{}])[0]).get("id")
+            if _criar_alerta_rascunho(
+                cliente,
+                municipio_id=municipio_id,
+                sinal=resultado["sinal"],
+                texto=texto,
+                analise_id=analise_id,
+                agora=agora,
+                cfg=cfg,
+            ):
+                resumo["alertas"] += 1
         except Exception:
             LOGGER.exception("Falha na análise do município %s", municipio_id)
             resumo["erros"] += 1
@@ -342,7 +455,8 @@ def main() -> int:
         return 1
     resumo = executar_robo(create_client(url, chave))
     LOGGER.info("Robô: %s", resumo)
-    return 1 if resumo["erros"] and not resumo["municipios"] else 0
+    # Qualquer erro deixa a etapa vermelha no GitHub (sem sucesso enganoso).
+    return 1 if resumo["erros"] or not resumo["municipios"] else 0
 
 
 if __name__ == "__main__":

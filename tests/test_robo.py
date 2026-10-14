@@ -52,10 +52,37 @@ class TestAnaliseEstacao(unittest.TestCase):
         resultado = analisar_estacao(estacao, serie([(24, 905), (1, 905)]), CFG, agora=AGORA)
         self.assertEqual(resultado["sinal"], "alto")
 
-    def test_perto_da_seca_historica_gera_alerta(self) -> None:
-        estacao = {**ESTACAO, "seca_historica_cm": 300}
-        resultado = analisar_estacao(estacao, serie([(24, 310), (1, 309)]), CFG, agora=AGORA)
+    MARCADORES = {
+        "seca_historica_cm": 254, "seca_historica_data": "2024-10-11",
+        "cheia_historica_cm": 2235.5, "cheia_historica_data": "2015-06-24",
+    }
+
+    def _faixa(self, nivel: float) -> dict[str, Any]:
+        estacao = {**ESTACAO, **self.MARCADORES}
+        return analisar_estacao(estacao, serie([(24, nivel), (1, nivel)]), CFG, agora=AGORA)
+
+    def test_perto_da_seca_recorde_gera_alerta_com_motivo(self) -> None:
+        resultado = self._faixa(400)  # (400-254)/(2235.5-254) = 7,4%
+        self.assertEqual(resultado["posicao_pct"], 7.4)
         self.assertEqual(resultado["sinal"], "alerta")
+        self.assertIn("seca recorde de 254 cm em 11/10/2024", resultado["motivos"][0])
+
+    def test_faixa_de_atencao_e_faixa_usual(self) -> None:
+        self.assertEqual(self._faixa(600)["sinal"], "atencao")  # 17,5%
+        self.assertEqual(self._faixa(1200)["sinal"], "normal")  # 47,7%
+
+    def test_perto_da_cheia_recorde_tambem_alerta(self) -> None:
+        self.assertEqual(self._faixa(2100)["sinal"], "alerta")  # 93,2%
+
+    def test_abaixo_da_seca_recorde_e_alto(self) -> None:
+        resultado = self._faixa(240)
+        self.assertEqual(resultado["sinal"], "alto")
+        self.assertIn("abaixo da seca recorde", resultado["motivos"][0])
+
+    def test_sem_marcadores_nao_inventa_posicao(self) -> None:
+        resultado = analisar_estacao(ESTACAO, serie([(24, 400), (1, 400)]), CFG, agora=AGORA)
+        self.assertIsNone(resultado["posicao_pct"])
+        self.assertEqual(resultado["sinal"], "normal")
 
 
 class TestConsolidacao(unittest.TestCase):
@@ -152,11 +179,45 @@ class TestExecucaoRobo(unittest.TestCase):
         )
         with mock.patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
             resumo = executar_robo(cliente, agora=AGORA)
-        self.assertEqual(resumo, {"municipios": 1, "ia": 0, "modelo_fixo": 1, "erros": 0})
-        linha = cliente.inseridos[0]
+        self.assertEqual(
+            resumo, {"municipios": 1, "ia": 0, "modelo_fixo": 1, "alertas": 1, "erros": 0}
+        )
+        linha, alerta = cliente.inseridos
         self.assertEqual(linha["sinal"], "alerta")
+        self.assertEqual(alerta["status"], "rascunho")
+        self.assertEqual(alerta["classe"], "Alerta")
         self.assertEqual(linha["fontes_json"][0]["nome"], "ANA estação 13990000")
         self.assertIsNotNone(linha["data_hora_leitura_referencia"])
+
+
+    def test_nao_repete_alerta_dentro_da_janela(self) -> None:
+        leituras = [{"estacao_id": "e1", **l} for l in serie([(24.5, 960), (0.5, 925)])]
+        cliente = ClienteFalso(
+            {
+                "estacoes": [{**ESTACAO, "id": "e1", "municipio_id": "1300631"}],
+                "municipios": [{"id_ibge": "1300631", "nome": "Beruri"}],
+                "leituras": leituras,
+                "alertas": [{"id": "existente"}],
+            }
+        )
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
+            resumo = executar_robo(cliente, agora=AGORA)
+        self.assertEqual(resumo["alertas"], 0)
+        self.assertEqual(len(cliente.inseridos), 1)
+
+
+class TestRelatorioRobo(unittest.TestCase):
+    def test_gera_pdf_com_marcadores(self) -> None:
+        from core.relatorio_robo import gerar_relatorio_robo, linhas_estacoes
+
+        estacao = analisar_estacao(
+            {**ESTACAO, **TestAnaliseEstacao.MARCADORES}, serie([(24, 400), (1, 400)]), CFG, agora=AGORA
+        )
+        analises = {"1300631": {"sinal": "alerta", "direcao": "estavel", "texto": "Beruri: alerta.",
+                                "gerado_em": AGORA.isoformat(), "estacoes_json": [estacao]}}
+        linhas = linhas_estacoes(analises, {"1300631": "Beruri/AM"})
+        self.assertEqual(linhas[0]["Seca recorde (cm)"], "254 (11/10/2024)")
+        self.assertTrue(gerar_relatorio_robo(analises, {"1300631": "Beruri/AM"}).startswith(b"%PDF"))
 
 
 if __name__ == "__main__":

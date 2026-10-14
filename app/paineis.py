@@ -27,12 +27,15 @@ from app.visual import (
     carregar_series,
     cartao_analise,
     grafico_barras,
+    grafico_estacao_marcadores,
+    grafico_faixa_historica,
     grafico_series,
     grafico_sinais,
     grafico_variacao,
     kpis_robo,
     mapa_risco,
 )
+from core.relatorio_robo import gerar_relatorio_robo
 from core.robo import ROTULOS_SINAL
 from core.alertas import (
     atualizar_alerta,
@@ -149,13 +152,28 @@ def _secao_situacao_visual(
                 grafico_barras(contagem, "Municípios por classe do índice")
             else:
                 st.info("Índice indisponível: faltam cotas oficiais de alerta nas estações.")
+        grafico_faixa_historica(analises, nomes)
         grafico_variacao(analises, nomes)
         try:
-            grafico_series(carregar_series(cliente))
+            series = carregar_series(cliente)
+            grafico_estacao_marcadores(series, analises, nomes)
+            grafico_series(series)
         except Exception as erro:
             st.warning(f"Série de níveis indisponível: {erro}")
     with aba_analises:
         st.caption(AVISO_ROBO)
+        if analises:
+            try:
+                st.download_button(
+                    "📄 Baixar relatório do robô (PDF)",
+                    gerar_relatorio_robo(
+                        analises, {c: _nome_municipio(municipios, c) for c in analises}
+                    ),
+                    file_name="relatorio_risco_robo.pdf",
+                    mime="application/pdf",
+                )
+            except Exception as erro:
+                st.warning(f"Relatório do robô indisponível: {erro}")
         ordem = {"alto": 0, "alerta": 1, "atencao": 2, "normal": 3, "sem_dados": 4}
         for codigo, analise in sorted(
             analises.items(), key=lambda item: ordem.get(item[1].get("sinal"), 9)
