@@ -8,7 +8,6 @@ from typing import Any, Callable
 
 from collectors.ana import coletar as coletar_ana
 from collectors.cemaden import coletar as coletar_cemaden
-from collectors.cnes import coletar as coletar_cnes
 from collectors.ibge import coletar as coletar_ibge
 from collectors.inep import coletar as coletar_inep
 from collectors.inmet import coletar as coletar_inmet
@@ -25,7 +24,7 @@ COLETORES: dict[str, Callable[..., list[dict[str, Any]]]] = {
     "sgb": coletar_sgb,
     "cemaden": coletar_cemaden,
     "ibge": coletar_ibge,
-    "cnes": coletar_cnes,
+    # "cnes": importado semanalmente por python -m collectors.cnes (registra a própria saúde).
     "inep": coletar_inep,
 }
 

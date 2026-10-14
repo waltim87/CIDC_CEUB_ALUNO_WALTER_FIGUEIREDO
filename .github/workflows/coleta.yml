@@ -36,6 +36,12 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m collectors.marcadores
+      - name: Estabelecimentos de saude do CNES (semanal)
+        # Só reimporta se a última importação tiver mais de 7 dias; falha fica na saúde das fontes.
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m collectors.cnes
       - name: Calcular indice e gerar rascunhos de alerta
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

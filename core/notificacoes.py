@@ -30,15 +30,24 @@ def _enviar_telegram(destino: str, texto: str) -> None:
     token = _segredo("TELEGRAM_BOT_TOKEN")
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN não configurado")
-    resposta = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data={"chat_id": destino, "text": texto},
-        timeout=20,
-    )
-    resposta.raise_for_status()
-    corpo = resposta.json()
+    try:
+        resposta = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data={"chat_id": destino.strip(), "text": texto},
+            timeout=20,
+        )
+        corpo = resposta.json()
+    except Exception as erro:
+        # Nunca propaga a mensagem original: ela contém a URL com o token.
+        raise RuntimeError(f"Telegram inacessível ({type(erro).__name__})") from None
     if not corpo.get("ok"):
-        raise RuntimeError("Telegram não confirmou a entrega")
+        descricao = str(corpo.get("description") or f"HTTP {resposta.status_code}")
+        dica = ""
+        if "chat not found" in descricao:
+            dica = " — use o chat_id numérico e peça à pessoa para enviar /start ao robô"
+        elif "blocked" in descricao:
+            dica = " — a pessoa bloqueou o robô"
+        raise RuntimeError(f"Telegram: {descricao}{dica}")
 
 
 def _enviar_email(destino: str, texto: str) -> None:
@@ -153,7 +162,7 @@ def enviar_alerta_aprovado(
             transporte(destino, alerta["texto"])
         except Exception as erro:
             status = "falha"
-            erro_registro = f"Falha no envio ({type(erro).__name__})"
+            erro_registro = f"Falha no envio: {str(erro)[:200]}"
             falhou += 1
             logger.warning(
                 "Falha no envio do alerta %s pelo canal %s (%s)",

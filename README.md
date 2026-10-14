@@ -366,3 +366,23 @@ modelo de texto fixo.
   - Logística: pré-posicionamento (água, alimento, combustível, purificador), abrigos,
     portos/captação/energia, rotas alternativas e assinaturas.
   - Registro de campo: cadastro de comunidade quando não houver e resumo dos atendimentos.
+
+## Etapa 11 — CNES, cadastros ampliados, relatórios por menu, voluntários, relatos e Telegram automático
+
+- **Saúde (CNES/DATASUS)**: `python -m collectors.cnes` importa semanalmente ~1.800
+  estabelecimentos de atendimento do AM (nome, endereço, telefone, e-mail, coordenadas,
+  internação/cirurgia/parto). Dados oficiais abertos — não gerados por IA.
+- **Cadastros ampliados** (migration `202610140006`): contatos, coordenadas, condições dos
+  abrigos, validade/local dos estoques, responsável/link do plano, desalojados/desabrigados.
+- **Relatório em cada menu**: PDF com todas as seções exibidas e CSV por tabela.
+- **Voluntários** (migration `202610140007`): autocadastro na tela de login com termo de
+  responsabilidade; acesso de leitura a todo o painel (sem editar cadastros nem aprovar
+  alertas; telefones pessoais mascarados na tela); vínculo do Telegram em "Meu cadastro".
+- **Relatos colaborativos (tipo Waze)**: chuva forte, rio subindo/baixando, cheia, incêndio/
+  fumaça, comunidade isolada; 3 confirmações de outras pessoas confirmam, 3 negações
+  descartam; confirmados aparecem na página pública como "não oficial".
+- **Telegram automático** (`.github/workflows/telegram.yml`, a cada 15 min): inscrição pela
+  própria pessoa (`/start` + nome da cidade, `/sair`), vínculo de voluntário pelo link e
+  envio automático dos alertas APROVADOS no painel. Exige o secret `TELEGRAM_BOT_TOKEN`
+  no GitHub. Não há base aberta legítima de telefones/Telegram de pessoas: o envio é só
+  para quem se inscreve (LGPD).

@@ -27,6 +27,8 @@ from app.cadastros import (
     bloco_recursos,
     bloco_situacao,
 )
+from app.relatorio_menu import painel_relatorio
+from app.voluntarios import bloco_voluntarios, convite_telegram, relatos_publicos
 from app.visual import (
     AVISO_ROBO,
     aplicar_estilo,
@@ -85,6 +87,7 @@ PERFIS_REVISAO = PERFIS_GESTAO | {
     "coordenador_municipal",
 }
 PERFIS_TODOS = {
+    "voluntario",
     "gestor_nacional",
     "gestor_estadual",
     "coordenador_municipal",
@@ -123,6 +126,19 @@ def _classes_indice(indices: list[dict[str, Any]]) -> dict[str, str]:
     for indice in indices:
         classes.setdefault(indice["municipio_id"].strip(), indice["classe"])
     return classes
+
+
+def _escolher_municipio(cliente: Any, perfil: dict[str, Any], chave: str) -> str | None:
+    """Município do perfil; administrador sem município e voluntário escolhem qualquer um."""
+    municipio_id = perfil.get("municipio_id")
+    if perfil["perfil"] == "voluntario" or (perfil["perfil"] == "administrador" and not municipio_id):
+        municipios = carregar_municipios(cliente)
+        codigos = sorted(municipios, key=lambda c: municipios[c]["nome"])
+        municipio_id = st.selectbox(
+            "Município", codigos, format_func=lambda codigo: _nome_municipio(municipios, codigo),
+            index=codigos.index(municipio_id) if municipio_id in codigos else 0, key=f"municipio-{chave}",
+        )
+    return municipio_id
 
 
 def _secao_situacao_visual(
@@ -230,7 +246,7 @@ def renderizar_painel_principal() -> None:
         {nome.replace("_", " ").title(): peso for nome, peso in pesos.items()},
         "Peso de cada componente (%)",
     )
-    if perfil["perfil"] not in PERFIS_GESTAO and perfil.get("municipio_id"):
+    if perfil["perfil"] not in PERFIS_GESTAO | {"voluntario"} and perfil.get("municipio_id"):
         indices = [
             indice
             for indice in indices
@@ -279,7 +295,7 @@ def renderizar_gestor() -> None:
     st.caption("Situação de todos os municípios, resumo por classe e relatórios")
     mostrar_aviso()
     try:
-        cliente, _ = exigir_perfil(PERFIS_GESTAO)
+        cliente, _ = exigir_perfil(PERFIS_GESTAO | {"voluntario"})
         municipios = carregar_municipios(cliente)
         indices = ler_indices(cliente, limite=5000)
         alertas = (
@@ -422,8 +438,11 @@ def renderizar_alertas() -> None:
     st.caption("Sugestões do motor — revisão humana necessária antes de enviar")
     mostrar_aviso()
     try:
-        cliente, perfil = exigir_perfil(PERFIS_REVISAO)
+        cliente, perfil = exigir_perfil(PERFIS_REVISAO | {"voluntario"})
         alertas = listar_alertas(cliente, limite=300)
+        pode_revisar = perfil["perfil"] in PERFIS_REVISAO
+        if not pode_revisar:
+            st.info("Modo leitura: a aprovação de alertas é exclusiva da Defesa Civil.")
     except Exception as erro:
         st.error(f"Não foi possível carregar os alertas: {erro}")
         return
@@ -434,6 +453,21 @@ def renderizar_alertas() -> None:
     if not alertas:
         st.info("Não há alertas registrados.")
         return
+    linhas_alertas = [
+        {"Município": f"{(a.get('municipio') or {}).get('nome', a['municipio_id'])}",
+         "Classe": a["classe"], "Status": a["status"],
+         "Criado em (UTC)": str(a.get("criado_em") or "")[:16].replace("T", " "),
+         "Emitido em (UTC)": str(a.get("emitido_em") or "")[:16].replace("T", " "),
+         "Texto": a.get("texto")}
+        for a in alertas
+    ]
+    painel_relatorio(
+        "Relatório de alertas",
+        [("Alertas", linhas_alertas)],
+        resumo={"Total": len(alertas), "Rascunhos": len(pendentes),
+                "Aprovados": sum(1 for a in alertas if a["status"] == "aprovado"),
+                "Enviados": sum(1 for a in alertas if a["status"] == "enviado")},
+    )
 
     for alerta in alertas:
         municipio = alerta.get("municipio") or {}
@@ -449,7 +483,9 @@ def renderizar_alertas() -> None:
                 f"{indice.get('data_hora_leitura_referencia') or 'não informada'} · "
                 f"Alerta emitido: {alerta.get('emitido_em') or 'ainda não emitido'}"
             )
-            if alerta["status"] == "rascunho":
+            if alerta["status"] == "rascunho" and not pode_revisar:
+                st.write(alerta["texto"])
+            elif alerta["status"] == "rascunho":
                 with st.form(f"revisao-{alerta['id']}"):
                     texto = st.text_area(
                         "Texto sugerido (edite antes de aprovar)", alerta["texto"]
@@ -466,7 +502,10 @@ def renderizar_alertas() -> None:
                                 texto=texto,
                                 aprovado_por=perfil["id"],
                             )
-                            st.success("Alerta aprovado. O envio ainda exige ação explícita.")
+                            st.success(
+                                "Alerta aprovado. O robô do Telegram envia automaticamente aos inscritos "
+                                "do município em até 15 minutos (ou use 'Enviar alerta aprovado')."
+                            )
                             st.rerun()
                         except Exception as erro:
                             st.error(f"Não foi possível aprovar: {erro}")
@@ -525,13 +564,9 @@ def renderizar_coordenador() -> None:
     st.title("Gestão municipal da Defesa Civil")
     mostrar_aviso()
     try:
-        cliente, perfil = exigir_perfil({"coordenador_municipal", "administrador"})
-        municipio_id = perfil.get("municipio_id")
-        if perfil["perfil"] == "administrador" and not municipio_id:
-            municipios = carregar_municipios(cliente)
-            municipio_id = st.selectbox(
-                "Município", list(municipios), format_func=lambda codigo: _nome_municipio(municipios, codigo)
-            )
+        cliente, perfil = exigir_perfil({"coordenador_municipal", "administrador", "voluntario"})
+        editavel = perfil["perfil"] != "voluntario"
+        municipio_id = _escolher_municipio(cliente, perfil, "gestao")
         municipio = _buscar_municipio(cliente, municipio_id)
         if not municipio_id or not municipio:
             st.info("Associe um município ao perfil para abrir este painel.")
@@ -543,29 +578,53 @@ def renderizar_coordenador() -> None:
             cartao_analise(f"{municipio['nome']}/{municipio['uf']}", analise)
         else:
             st.info("Sem análise do robô para este município (sem estação monitorada ou ainda não gerada).")
-        abas = st.tabs(
-            ["🏘️ Comunidades", "📦 Recursos", "🏠 Abrigos", "📋 Plano", "🏥 Infraestrutura",
-             "📢 Situação oficial", "✅ Tarefas por eixo"]
-        )
+        nomes_abas = ["🏘️ Comunidades", "📦 Recursos", "🏠 Abrigos", "📋 Plano", "🏥 Infraestrutura",
+                      "📢 Situação oficial", "✅ Tarefas por eixo"]
+        if editavel:
+            nomes_abas.append("🙋 Voluntários")
+        abas = st.tabs(nomes_abas)
         with abas[0]:
-            bloco_comunidades(cliente, municipio_id)
+            comunidades = bloco_comunidades(cliente, municipio_id, editavel)
         with abas[1]:
-            bloco_recursos(cliente, municipio_id)
+            recursos = bloco_recursos(cliente, municipio_id, editavel=editavel)
         with abas[2]:
-            bloco_abrigos(cliente, municipio_id)
+            abrigos = bloco_abrigos(cliente, municipio_id, editavel)
         with abas[3]:
-            bloco_plano(cliente, municipio_id)
+            plano = bloco_plano(cliente, municipio_id, editavel)
         with abas[4]:
-            bloco_infraestrutura(cliente, municipio_id)
+            infraestrutura = bloco_infraestrutura(
+                cliente, municipio_id, ["porto", "captacao", "energia", "escola"], editavel=editavel
+            )
         with abas[5]:
-            bloco_situacao(cliente, municipio_id)
+            situacao = bloco_situacao(cliente, municipio_id, editavel)
         with abas[6]:
-            _renderizar_acoes(cliente, municipio_id)
+            tarefas = _renderizar_acoes(cliente, municipio_id, editavel)
+        voluntarios: list[dict[str, Any]] = []
+        if editavel:
+            with abas[7]:
+                voluntarios = bloco_voluntarios(cliente, municipio_id)
+        nome_municipio = f"{municipio['nome']}/{municipio['uf']}"
+        painel_relatorio(
+            "Relatório de gestão municipal",
+            [("Comunidades", comunidades), ("Recursos", recursos), ("Abrigos", abrigos),
+             ("Plano de contingência", plano), ("Infraestrutura crítica", infraestrutura),
+             ("Situação oficial", situacao), ("Tarefas por eixo", tarefas)]
+            + ([("Voluntários", voluntarios)] if editavel else []),
+            subtitulo=nome_municipio,
+            resumo={
+                "População (IBGE 2022)": municipio.get("populacao"),
+                "Sinal do robô": ROTULOS_SINAL.get(analise["sinal"]) if analise else "sem análise",
+                "Análise do robô": analise["texto"] if analise else None,
+                "Comunidades cadastradas": len(comunidades),
+                "Pessoas em comunidades": sum(c.get("População estimada") or 0 for c in comunidades),
+                "Vagas em abrigos": sum(a.get("Vagas") or 0 for a in abrigos),
+            },
+        )
     except Exception as erro:
         st.error(f"Não foi possível carregar a gestão municipal: {erro}")
 
 
-def _renderizar_acoes(cliente: Any, municipio_id: str) -> None:
+def _renderizar_acoes(cliente: Any, municipio_id: str, editavel: bool = True) -> list[dict[str, Any]]:
     """Tarefas por eixo do PN-PDC, vinculadas a alertas do município."""
     st.subheader("Tarefas por eixo")
     alertas = (
@@ -580,7 +639,7 @@ def _renderizar_acoes(cliente: Any, municipio_id: str) -> None:
     )
     if not alertas:
         st.info("Sem alertas neste município; as tarefas são vinculadas a um alerta.")
-        return
+        return []
     ids = [alerta["id"] for alerta in alertas]
     acoes = (
         cliente.table("acoes")
@@ -610,6 +669,13 @@ def _renderizar_acoes(cliente: Any, municipio_id: str) -> None:
                 )
             else:
                 st.caption("Nenhuma tarefa neste eixo.")
+    linhas_tarefas = [
+        {"Eixo": EIXOS.get(a["eixo"], a["eixo"]), "Descrição": a["descricao"],
+         "Prazo": a.get("prazo"), "Status": a["status"]}
+        for a in acoes
+    ]
+    if not editavel:
+        return linhas_tarefas
     por_id = {alerta["id"]: alerta for alerta in alertas}
     with st.form("nova-acao"):
         alerta_id = st.selectbox(
@@ -651,13 +717,18 @@ def _renderizar_acoes(cliente: Any, municipio_id: str) -> None:
                 raise RuntimeError("Tarefa não alterada; verifique as permissões.")
             st.success("Status atualizado.")
             st.rerun()
+    return [
+        {"Eixo": EIXOS.get(a["eixo"], a["eixo"]), "Descrição": a["descricao"],
+         "Prazo": a.get("prazo"), "Status": a["status"]}
+        for a in acoes
+    ]
 
 
 def renderizar_monitoramento() -> None:
     st.title("Sala de monitoramento")
     mostrar_aviso()
     try:
-        cliente, _ = exigir_perfil({"operador_monitoramento", "administrador"})
+        cliente, _ = exigir_perfil({"operador_monitoramento", "administrador", "voluntario"})
         fontes = (
             cliente.table("fontes")
             .select("nome,tipo,status,ultima_coleta,ultima_verificacao,ultimo_erro")
@@ -666,7 +737,8 @@ def renderizar_monitoramento() -> None:
         )
         estacoes = (
             cliente.table("estacoes")
-            .select("codigo_oficial,nome,rio,municipio_id")
+            .select("*")
+            .not_.is_("codigo_oficial", "null")
             .limit(1000)
             .execute()
         )
@@ -674,21 +746,58 @@ def renderizar_monitoramento() -> None:
             cliente.table("leituras")
             .select("estacao_id,data_hora_leitura,nivel_cm,vazao,chuva_mm,coletado_em,fonte_id")
             .order("data_hora_leitura", desc=True)
-            .limit(200)
+            .limit(1000)
             .execute()
         )
+        nomes_mun = {c: m["nome"] for c, m in carregar_municipios(cliente).items()}
+        por_estacao = {e["id"]: e for e in estacoes.data or []}
+        ultima: dict[str, dict] = {}
+        for leitura in leituras.data or []:
+            if leitura.get("nivel_cm") is not None:
+                ultima.setdefault(leitura["estacao_id"], leitura)
+        linhas_fontes = [
+            {"Fonte": f["nome"], "Tipo": f["tipo"], "Status": f["status"],
+             "Última coleta (UTC)": str(f.get("ultima_coleta") or "")[:16].replace("T", " "),
+             "Última verificação (UTC)": str(f.get("ultima_verificacao") or "")[:16].replace("T", " "),
+             "Último erro": f.get("ultimo_erro")}
+            for f in fontes.data or []
+        ]
+        linhas_estacoes = [
+            {"Código": e["codigo_oficial"], "Estação": e["nome"], "Rio": e.get("rio"),
+             "Município": nomes_mun.get(str(e.get("municipio_id") or "").strip(), e.get("municipio_id")),
+             "Último nível (cm)": (ultima.get(e["id"]) or {}).get("nivel_cm"),
+             "Leitura (UTC)": str((ultima.get(e["id"]) or {}).get("data_hora_leitura") or "")[:16].replace("T", " "),
+             "Seca recorde (cm)": e.get("seca_historica_cm"), "Cheia recorde (cm)": e.get("cheia_historica_cm")}
+            for e in sorted(estacoes.data or [], key=lambda e: (str(e.get("rio")), e["nome"]))
+        ]
+        linhas_leituras = [
+            {"Estação": (por_estacao.get(l["estacao_id"]) or {}).get("nome"),
+             "Leitura (UTC)": str(l["data_hora_leitura"])[:16].replace("T", " "),
+             "Nível (cm)": l.get("nivel_cm"), "Vazão (m³/s)": l.get("vazao"), "Chuva (mm)": l.get("chuva_mm")}
+            for l in (leituras.data or [])[:300]
+        ]
+        sem_leitura = sum(1 for l in linhas_estacoes if l["Último nível (cm)"] is None)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Estações cadastradas", len(linhas_estacoes))
+        c2.metric("Sem leitura de nível recente", sem_leitura)
+        c3.metric("Fontes com erro", sum(1 for f in linhas_fontes if f["Status"] == "erro"))
         st.subheader("Saúde das fontes")
-        st.dataframe(fontes.data or [], hide_index=True, width="stretch")
+        st.dataframe(linhas_fontes, hide_index=True, width="stretch")
         aplicar_estilo()
         grafico_series(carregar_series(cliente))
         analises = carregar_analises(cliente)
-        nomes_municipios = {c: m["nome"] for c, m in carregar_municipios(cliente).items()}
-        grafico_variacao(analises, nomes_municipios)
+        grafico_variacao(analises, nomes_mun)
         st.subheader("Estações")
-        st.dataframe(estacoes.data or [], hide_index=True, width="stretch")
+        st.dataframe(linhas_estacoes, hide_index=True, width="stretch")
         st.subheader("Leituras recentes")
-        st.dataframe(leituras.data or [], hide_index=True, width="stretch")
+        st.dataframe(linhas_leituras, hide_index=True, width="stretch")
         _renderizar_comparacao_historica(cliente, leituras.data or [])
+        painel_relatorio(
+            "Relatório da sala de monitoramento",
+            [("Saúde das fontes", linhas_fontes), ("Estações", linhas_estacoes), ("Leituras recentes", linhas_leituras)],
+            resumo={"Estações cadastradas": len(linhas_estacoes), "Sem leitura de nível recente": sem_leitura,
+                    "Fonte hidrológica": "ANA telemetria (horário UTC-03:00 inferido)"},
+        )
     except Exception as erro:
         st.error(f"Não foi possível carregar o monitoramento: {erro}")
 
@@ -790,12 +899,21 @@ def renderizar_agente_campo() -> None:
                     item["nome"] for item in comunidades if item["id"] == codigo
                 ),
             )
-            familias = st.number_input("Famílias afetadas", min_value=0, step=1)
-            pessoas = st.number_input("Pessoas afetadas", min_value=0, step=1)
+            c1, c2 = st.columns(2)
+            familias = c1.number_input("Famílias afetadas", min_value=0, step=1)
+            pessoas = c2.number_input("Pessoas afetadas", min_value=0, step=1)
+            c1, c2 = st.columns(2)
+            desalojados = c1.number_input("Desalojados (em casa de parentes/amigos)", min_value=0, step=1)
+            desabrigados = c2.number_input("Desabrigados (precisam de abrigo público)", min_value=0, step=1)
             necessidades = st.multiselect(
                 "Necessidades informadas",
-                ["água", "alimento", "medicamento", "abrigo", "transporte", "outra"],
+                ["água", "alimento", "medicamento", "abrigo", "transporte", "atendimento médico",
+                 "kit higiene", "combustível", "outra"],
             )
+            observacoes = st.text_area("Observações do atendimento")
+            c1, c2 = st.columns(2)
+            lat = c1.number_input("Latitude (opcional)", value=None, format="%.5f", min_value=-90.0, max_value=90.0)
+            lon = c2.number_input("Longitude (opcional)", value=None, format="%.5f", min_value=-180.0, max_value=180.0)
             salvar = st.form_submit_button("Registrar")
         if salvar:
             resultado = (
@@ -807,6 +925,11 @@ def renderizar_agente_campo() -> None:
                         "pessoas": int(pessoas),
                         "necessidades": necessidades,
                         "data": datetime.now(timezone.utc).isoformat(),
+                        "desalojados": int(desalojados),
+                        "desabrigados": int(desabrigados),
+                        "observacoes": observacoes.strip() or None,
+                        "latitude": lat,
+                        "longitude": lon,
                     }
                 )
                 .execute()
@@ -814,14 +937,30 @@ def renderizar_agente_campo() -> None:
             if not resultado.data:
                 raise RuntimeError("O Supabase não confirmou o registro")
             st.success("Registro salvo com auditoria.")
-        _resumo_afetados(cliente, municipio_id)
+        afetados = _resumo_afetados(cliente, municipio_id)
         with st.expander("Cadastrar nova comunidade"):
-            bloco_comunidades(cliente, municipio_id)
+            lista_comunidades = bloco_comunidades(cliente, municipio_id)
+        painel_relatorio(
+            "Relatório de registro de campo",
+            [("Atendimentos registrados", afetados), ("Comunidades", lista_comunidades)],
+            subtitulo=_nome_municipio(carregar_municipios(cliente), municipio_id),
+            resumo=_totais_afetados(afetados),
+        )
     except Exception as erro:
         st.error(f"Não foi possível registrar o atendimento: {erro}")
 
 
-def _resumo_afetados(cliente: Any, municipio_id: str) -> None:
+def _totais_afetados(linhas: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "Atendimentos": len(linhas),
+        "Famílias": sum(l.get("Famílias") or 0 for l in linhas),
+        "Pessoas": sum(l.get("Pessoas") or 0 for l in linhas),
+        "Desalojados": sum(l.get("Desalojados") or 0 for l in linhas),
+        "Desabrigados": sum(l.get("Desabrigados") or 0 for l in linhas),
+    }
+
+
+def _resumo_afetados(cliente: Any, municipio_id: str) -> list[dict[str, Any]]:
     """Totais e últimos registros de famílias afetadas nas comunidades do município."""
     comunidades = {
         c["id"]: c["nome"]
@@ -832,10 +971,10 @@ def _resumo_afetados(cliente: Any, municipio_id: str) -> None:
     }
     if not comunidades:
         st.info("Sem comunidades cadastradas neste município.")
-        return
+        return []
     registros = (
         cliente.table("pessoas_afetadas")
-        .select("comunidade_id,familias,pessoas,necessidades,data")
+        .select("*")
         .in_("comunidade_id", list(comunidades))
         .order("data", desc=True)
         .limit(200)
@@ -846,31 +985,33 @@ def _resumo_afetados(cliente: Any, municipio_id: str) -> None:
     st.subheader("Famílias e pessoas afetadas")
     if not registros:
         st.info("Nenhum registro de campo ainda.")
-        return
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Registros", len(registros))
-    c2.metric("Famílias", sum(r["familias"] for r in registros))
-    c3.metric("Pessoas", sum(r["pessoas"] for r in registros))
+        return []
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Famílias", sum(r["familias"] for r in registros))
+    c2.metric("Pessoas", sum(r["pessoas"] for r in registros))
+    c3.metric("Desalojados", sum(r.get("desalojados") or 0 for r in registros))
+    c4.metric("Desabrigados", sum(r.get("desabrigados") or 0 for r in registros))
     necessidades: dict[str, int] = {}
     for registro in registros:
         for item in registro.get("necessidades") or []:
             necessidades[item] = necessidades.get(item, 0) + 1
     if necessidades:
         grafico_barras(dict(sorted(necessidades.items(), key=lambda i: -i[1])), "Necessidades mais citadas")
-    st.dataframe(
-        [
-            {
-                "Data (UTC)": str(r["data"])[:16].replace("T", " "),
-                "Comunidade": comunidades.get(r["comunidade_id"], r["comunidade_id"]),
-                "Famílias": r["familias"],
-                "Pessoas": r["pessoas"],
-                "Necessidades": ", ".join(r.get("necessidades") or []),
-            }
-            for r in registros[:50]
-        ],
-        hide_index=True,
-        width="stretch",
-    )
+    linhas = [
+        {
+            "Data (UTC)": str(r["data"])[:16].replace("T", " "),
+            "Comunidade": comunidades.get(r["comunidade_id"], r["comunidade_id"]),
+            "Famílias": r["familias"],
+            "Pessoas": r["pessoas"],
+            "Desalojados": r.get("desalojados"),
+            "Desabrigados": r.get("desabrigados"),
+            "Necessidades": ", ".join(r.get("necessidades") or []),
+            "Observações": r.get("observacoes"),
+        }
+        for r in registros
+    ]
+    st.dataframe(linhas, hide_index=True, width="stretch")
+    return linhas
 
 
 def renderizar_saude() -> None:
@@ -878,14 +1019,10 @@ def renderizar_saude() -> None:
     mostrar_aviso()
     try:
         cliente, perfil = exigir_perfil(
-            {"saude_assistencia", "coordenador_municipal", "administrador"}
+            {"saude_assistencia", "coordenador_municipal", "administrador", "voluntario"}
         )
-        municipio_id = perfil.get("municipio_id")
-        if perfil["perfil"] == "administrador" and not municipio_id:
-            municipios = carregar_municipios(cliente)
-            municipio_id = st.selectbox(
-                "Município", list(municipios), format_func=lambda codigo: _nome_municipio(municipios, codigo)
-            )
+        editavel = perfil["perfil"] != "voluntario"
+        municipio_id = _escolher_municipio(cliente, perfil, "saude")
         if not municipio_id:
             st.info("Associe um município ao perfil.")
             return
@@ -893,12 +1030,25 @@ def renderizar_saude() -> None:
             ["🏥 Unidades de saúde", "💊 Medicamentos e oxigênio", "👪 Famílias afetadas"]
         )
         with aba_unidades:
-            bloco_infraestrutura(cliente, municipio_id, ["ubs"])
+            unidades = bloco_infraestrutura(cliente, municipio_id, ["ubs"], editavel=editavel)
         with aba_estoque:
-            bloco_recursos(cliente, municipio_id, ["medicamento", "oxigenio"])
+            estoque = bloco_recursos(cliente, municipio_id, ["medicamento", "oxigenio"], editavel=editavel)
         with aba_afetados:
-            _resumo_afetados(cliente, municipio_id)
+            afetados = _resumo_afetados(cliente, municipio_id)
         st.caption("Rotas de evacuação médica: registre-as no plano de contingência (Gestão municipal).")
+        painel_relatorio(
+            "Relatório de saúde e assistência",
+            [("Estabelecimentos de saúde", unidades), ("Medicamentos e oxigênio", estoque),
+             ("Atendimentos de campo", afetados)],
+            subtitulo=_nome_municipio(carregar_municipios(cliente), municipio_id),
+            resumo={
+                "Estabelecimentos listados": len(unidades),
+                "Com internação": sum(1 for u in unidades if u.get("Internação") == "sim"),
+                "Com telefone": sum(1 for u in unidades if u.get("Telefone")),
+                **_totais_afetados(afetados),
+                "Fonte dos estabelecimentos": "CNES/DATASUS (dados abertos), importação semanal",
+            },
+        )
     except Exception as erro:
         st.error(f"Não foi possível carregar o painel de saúde: {erro}")
 
@@ -908,14 +1058,10 @@ def renderizar_logistica() -> None:
     mostrar_aviso()
     try:
         cliente, perfil = exigir_perfil(
-            {"logistica_abastecimento", "coordenador_municipal", "administrador"}
+            {"logistica_abastecimento", "coordenador_municipal", "administrador", "voluntario"}
         )
-        municipio_id = perfil.get("municipio_id")
-        if perfil["perfil"] == "administrador" and not municipio_id:
-            municipios = carregar_municipios(cliente)
-            municipio_id = st.selectbox(
-                "Município", list(municipios), format_func=lambda codigo: _nome_municipio(municipios, codigo)
-            )
+        editavel = perfil["perfil"] != "voluntario"
+        municipio_id = _escolher_municipio(cliente, perfil, "logistica")
         if not municipio_id:
             st.info("Associe um município ao perfil.")
             return
@@ -924,15 +1070,33 @@ def renderizar_logistica() -> None:
              "🛶 Rotas alternativas", "🔔 Assinaturas de alertas"]
         )
         with aba_estoque:
-            bloco_recursos(cliente, municipio_id, ["agua", "alimento", "combustivel", "purificador"])
+            estoque = bloco_recursos(
+                cliente, municipio_id, ["agua", "alimento", "combustivel", "purificador"], editavel=editavel
+            )
         with aba_abrigos:
-            bloco_abrigos(cliente, municipio_id)
+            abrigos = bloco_abrigos(cliente, municipio_id, editavel)
         with aba_infra:
-            bloco_infraestrutura(cliente, municipio_id, ["porto", "captacao", "energia"])
+            infraestrutura = bloco_infraestrutura(cliente, municipio_id, ["porto", "captacao", "energia"], editavel=editavel)
         with aba_rotas:
-            bloco_plano(cliente, municipio_id)
+            plano = bloco_plano(cliente, municipio_id, editavel)
         with aba_assinaturas:
-            _renderizar_assinaturas(cliente, perfil)
+            if editavel:
+                _renderizar_assinaturas(cliente, perfil)
+            else:
+                st.info("As assinaturas são geridas pela coordenação. Para receber alertas, vincule seu "
+                        "Telegram em \"Meu cadastro\".")
+        painel_relatorio(
+            "Relatório de logística e abastecimento",
+            [("Pré-posicionamento", estoque), ("Abrigos", abrigos),
+             ("Portos, captação e energia", infraestrutura), ("Plano e rotas alternativas", plano)],
+            subtitulo=_nome_municipio(carregar_municipios(cliente), municipio_id),
+            resumo={
+                "Itens em estoque": len(estoque),
+                "Itens vencidos": sum(1 for e in estoque if e.get("Vencido")),
+                "Abrigos": len(abrigos),
+                "Vagas em abrigos": sum(a.get("Vagas") or 0 for a in abrigos),
+            },
+        )
     except Exception as erro:
         st.error(f"Não foi possível carregar logística: {erro}")
 
@@ -1071,7 +1235,7 @@ def renderizar_pesquisador() -> None:
         cliente = cliente_supabase()
         resultado = (
             cliente.table("municipios")
-            .select("id_ibge,nome,uf,calha,populacao")
+            .select("id_ibge,nome,uf,calha,populacao,populacao_fonte,latitude,longitude")
             .order("nome")
             .limit(1000)
             .execute()
@@ -1088,6 +1252,15 @@ def renderizar_pesquisador() -> None:
                 data=buffer.getvalue().encode("utf-8-sig"),
                 file_name="municipios_am.csv",
                 mime="text/csv",
+            )
+            painel_relatorio(
+                "Dados abertos — municípios do Amazonas",
+                [("Municípios", [{"Código IBGE": d["id_ibge"], "Município": d["nome"], "UF": d["uf"],
+                                  "População": d.get("populacao"), "Fonte": d.get("populacao_fonte")}
+                                 for d in dados])],
+                resumo={"Municípios": len(dados),
+                        "População total": sum(d.get("populacao") or 0 for d in dados),
+                        "Fonte": "IBGE Censo 2022 (agregado 4709, var. 93)"},
             )
     except Exception as erro:
         st.error(f"Não foi possível carregar dados públicos: {erro}")
@@ -1143,6 +1316,17 @@ def renderizar_publico() -> None:
             st.markdown(f"### {alerta['classe']} · {alerta['criado_em']}")
             st.write(alerta["texto"])
             st.caption(f"Emitido em: {alerta.get('emitido_em') or 'ainda não emitido'}")
+        relatos_publicos(cliente, {c: m["nome"] for c, m in municipios.items()})
+        convite_telegram()
+        painel_relatorio(
+            "Situação pública da Defesa Civil",
+            [("Situação municipal", [{"Data": x.get("data"), "Situação": x.get("situacao"), "Fonte": x.get("fonte")}
+                                     for x in situacao]),
+             ("Alertas emitidos", [{"Classe": x["classe"], "Emitido em": x.get("emitido_em"), "Texto": x["texto"]}
+                                   for x in alertas])],
+            subtitulo=_nome_municipio(municipios, municipio_id),
+            resumo={"Emergência": "ligue 199 (Defesa Civil)"},
+        )
     except Exception as erro:
         st.error(f"Não foi possível carregar a situação pública: {erro}")
 

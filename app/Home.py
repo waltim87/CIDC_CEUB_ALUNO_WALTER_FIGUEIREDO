@@ -29,6 +29,7 @@ from app.paineis import (
     renderizar_coordenador,
     renderizar_monitoramento,
 )
+from app.voluntarios import renderizar_meu_cadastro, renderizar_relatos
 
 st.set_page_config(page_title="CIDC | Defesa Civil", page_icon="🌧️", layout="wide")
 
@@ -72,7 +73,12 @@ else:
         pagina_publica,
     ]
     nome_perfil = perfil["perfil"]
-    if nome_perfil in {"gestor_nacional", "gestor_estadual", "administrador"}:
+    leitor = nome_perfil == "voluntario"  # lê tudo, não aprova alertas nem edita cadastros
+    if nome_perfil != "pesquisador":
+        paginas.insert(1, st.Page(renderizar_relatos, title="Relatos de campo", icon="📢"))
+    if leitor:
+        paginas.insert(1, st.Page(renderizar_meu_cadastro, title="Meu cadastro", icon="🙋"))
+    if nome_perfil in {"gestor_nacional", "gestor_estadual", "administrador"} or leitor:
         paginas.insert(
             1,
             st.Page(renderizar_gestor, title="Visão estadual/nacional", icon="🗺️"),
@@ -83,15 +89,15 @@ else:
         "administrador",
         "operador_monitoramento",
         "coordenador_municipal",
-    }:
+    } or leitor:
         paginas.append(
-            st.Page(renderizar_alertas, title="Revisão de alertas", icon="🚨")
+            st.Page(renderizar_alertas, title="Alertas" if leitor else "Revisão de alertas", icon="🚨")
         )
-    if nome_perfil in {"coordenador_municipal", "administrador"}:
+    if nome_perfil in {"coordenador_municipal", "administrador"} or leitor:
         paginas.append(
             st.Page(renderizar_coordenador, title="Gestão municipal", icon="🏘️")
         )
-    if nome_perfil in {"operador_monitoramento", "administrador"}:
+    if nome_perfil in {"operador_monitoramento", "administrador"} or leitor:
         paginas.append(
             st.Page(renderizar_monitoramento, title="Sala de monitoramento", icon="📡")
         )
@@ -99,11 +105,11 @@ else:
         paginas.append(
             st.Page(renderizar_agente_campo, title="Registro de campo", icon="📍")
         )
-    if nome_perfil in {"saude_assistencia", "coordenador_municipal", "administrador"}:
+    if nome_perfil in {"saude_assistencia", "coordenador_municipal", "administrador"} or leitor:
         paginas.append(
             st.Page(renderizar_saude, title="Saúde e assistência", icon="🏥")
         )
-    if nome_perfil in {"logistica_abastecimento", "coordenador_municipal", "administrador"}:
+    if nome_perfil in {"logistica_abastecimento", "coordenador_municipal", "administrador"} or leitor:
         paginas.append(
             st.Page(renderizar_logistica, title="Logística e recursos", icon="🚤")
         )

@@ -189,7 +189,7 @@ class TestNotificacoes(unittest.TestCase):
         self.assertEqual(enviados, ["contato@example.org"])
         self.assertEqual([item["status"] for item in cliente.entregas], ["falha", "enviado"])
         self.assertEqual(
-            cliente.entregas[0]["erro"], "Falha no envio (TimeoutError)"
+            cliente.entregas[0]["erro"], "Falha no envio: erro de transporte"
         )
 
     def test_reenvio_pula_destinos_ja_entregues(self) -> None:

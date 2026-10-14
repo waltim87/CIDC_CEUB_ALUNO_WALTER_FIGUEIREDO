@@ -489,3 +489,82 @@ def totais_detalhados(linhas: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             linha.get("Situação oficial") != "Não informada" for linha in linhas
         ),
     }
+
+def gerar_pdf_secoes(
+    titulo: str,
+    secoes: Sequence[tuple[str, Sequence[Mapping[str, Any]]]],
+    *,
+    subtitulo: str | None = None,
+    resumo: Mapping[str, Any] | None = None,
+    max_colunas_tabela: int = 7,
+) -> bytes:
+    """PDF de um menu: aviso, resumo e uma seção por tabela exibida.
+
+    Seções com até ``max_colunas_tabela`` colunas viram tabela; as mais largas
+    viram fichas (um bloco por linha), para não cortar endereço/telefone.
+    """
+    from fpdf import FPDF
+
+    pdf = FPDF(orientation="L", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, _latin1(titulo), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 9)
+    if subtitulo:
+        pdf.cell(0, 5, _latin1(subtitulo), new_x="LMARGIN", new_y="NEXT")
+    gerado = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(0, 5, _latin1(f"Gerado em {gerado}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(0, 4, _latin1(AVISO), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+    if resumo:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 6, "Resumo", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 9)
+        for chave, valor in resumo.items():
+            pdf.cell(0, 5, _latin1(f"{chave}: {'n/d' if valor is None else valor}"), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+    largura_util = pdf.w - pdf.l_margin - pdf.r_margin
+    for titulo_secao, linhas in secoes:
+        if pdf.get_y() > pdf.h - 40:
+            pdf.add_page()
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_fill_color(230, 236, 245)
+        pdf.cell(0, 7, _latin1(f"{titulo_secao} ({len(linhas)})"), fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+        if not linhas:
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.cell(0, 5, "Sem registros.", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+            continue
+        colunas = list(linhas[0].keys())
+        if len(colunas) <= max_colunas_tabela:
+            largura = largura_util / len(colunas)
+            limite = max(int(largura / 1.6), 6)
+            pdf.set_font("Helvetica", "B", 8)
+            for coluna in colunas:
+                pdf.cell(largura, 6, _latin1(coluna)[:limite], border=1)
+            pdf.ln()
+            pdf.set_font("Helvetica", "", 8)
+            for linha in linhas:
+                if pdf.get_y() > pdf.h - 16:
+                    pdf.add_page()
+                for coluna in colunas:
+                    valor = linha.get(coluna)
+                    pdf.cell(largura, 6, _latin1("" if valor is None else valor)[:limite], border=1)
+                pdf.ln()
+        else:
+            for linha in linhas:
+                if pdf.get_y() > pdf.h - 30:
+                    pdf.add_page()
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.cell(0, 5, _latin1(linha.get(colunas[0]) or ""), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 8)
+                texto = "  |  ".join(
+                    f"{c}: {linha.get(c)}" for c in colunas[1:] if linha.get(c) not in (None, "")
+                )
+                pdf.multi_cell(0, 4, _latin1(texto), new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(1)
+        pdf.ln(3)
+    return bytes(pdf.output())

@@ -62,13 +62,26 @@ def obter_perfil(cliente: Any) -> dict[str, Any] | None:
         return None
 
     usuario_id = sessao.user.id
-    resultado = (
-        cliente.table("usuarios")
-        .select("id,nome,perfil,municipio_id,auth_id")
-        .eq("auth_id", usuario_id)
-        .limit(1)
-        .execute()
-    )
+
+    def consultar() -> Any:
+        return (
+            cliente.table("usuarios")
+            .select("id,nome,perfil,municipio_id,auth_id")
+            .eq("auth_id", usuario_id)
+            .limit(1)
+            .execute()
+        )
+
+    resultado = consultar()
+    if not resultado.data:
+        # Autocadastro de voluntário: conclui no primeiro login com os dados guardados na conta.
+        from app.voluntarios import concluir_cadastro_pendente
+
+        try:
+            if concluir_cadastro_pendente(cliente, getattr(sessao.user, "user_metadata", None) or {}):
+                resultado = consultar()
+        except Exception as erro:
+            raise PermissionError(f"Não foi possível concluir o cadastro de voluntário: {erro}") from erro
     if not resultado.data:
         raise PermissionError(
             "Sua conta autenticou, mas ainda não recebeu um perfil CIDC. "
@@ -85,6 +98,7 @@ def obter_perfil(cliente: Any) -> dict[str, Any] | None:
         "logistica_abastecimento",
         "pesquisador",
         "administrador",
+        "voluntario",
     }:
         raise PermissionError(f"Perfil CIDC não reconhecido: {perfil['perfil']}")
     perfil["municipio_id"] = (
@@ -120,8 +134,22 @@ def encerrar_sessao(cliente: Any) -> None:
 
 
 def renderizar_login() -> None:
-    st.title("Entrar na plataforma")
-    st.caption("Entre com uma conta criada no Supabase Auth e vinculada a um perfil CIDC.")
+    st.title("Centro de Inteligência da Defesa Civil")
+    aba_entrar, aba_voluntario = st.tabs(["🔐 Entrar", "🙋 Quero ser voluntário"])
+    with aba_voluntario:
+        from app.comum import carregar_municipios
+        from app.voluntarios import formulario_cadastro_voluntario
+
+        try:
+            formulario_cadastro_voluntario(carregar_municipios(cliente_publico()))
+        except Exception as erro:
+            st.error(f"Cadastro de voluntário indisponível: {erro}")
+    with aba_entrar:
+        _formulario_login()
+
+
+def _formulario_login() -> None:
+    st.caption("Entre com seu e-mail e senha.")
     with st.form("formulario-login"):
         email = st.text_input("E-mail", autocomplete="email")
         senha = st.text_input("Senha", type="password", autocomplete="current-password")
@@ -136,6 +164,6 @@ def renderizar_login() -> None:
         except Exception as erro:
             st.error(f"Não foi possível autenticar: {erro}")
     st.info(
-        "O cadastro de usuários e a atribuição de perfis são controlados pelo "
-        "administrador. Não use uma conta sem município/perfil autorizado."
+        "Equipes da Defesa Civil: contas criadas pelo administrador. Voluntários: "
+        "cadastrem-se na aba \"Quero ser voluntário\"."
     )
