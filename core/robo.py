@@ -256,6 +256,46 @@ def aplicar_meteorologia(
     return resultado
 
 
+def _nivel_por_limite(valor: float | None, limites: dict[str, float]) -> str | None:
+    if valor is None:
+        return None
+    if valor >= limites.get("alerta", float("inf")):
+        return "alerta"
+    if valor >= limites.get("atencao", float("inf")):
+        return "atencao"
+    return None
+
+
+def aplicar_fontes_oficiais(
+    resultado: dict[str, Any], dados: dict[str, Any], cfg: dict[str, Any]
+) -> dict[str, Any]:
+    """SGB/SACE (situação oficial), Cemaden (chuva observada) e INPE (focos) elevam o sinal."""
+    regras = cfg.get("fontes_oficiais") or {}
+    sinal = resultado["sinal"]
+    sace = dados.get("sace") or []
+    resultado["sace"] = [{"ponto": p["nome"], "situacao": p.get("situacao"), "cota_cm": p.get("cota_cm"),
+                          "medido_em": p.get("medido_em")} for p in sace]
+    for ponto in sace:
+        efeito = (regras.get("situacao_sace") or {}).get(str(ponto.get("situacao") or ""))
+        if efeito:
+            sinal = _maior(sinal, efeito)
+            resultado["fatores"].append(f"SGB/SACE: ponto {ponto['nome']} em situação {ponto['situacao']}")
+    chuva = dados.get("chuva_24h")
+    resultado["chuva_observada_24h_mm"] = chuva
+    nivel = _nivel_por_limite(chuva, regras.get("chuva_observada_24h_mm") or {})
+    if nivel:
+        sinal = _maior(sinal, nivel)
+        resultado["fatores"].append(f"Cemaden: chuva observada de {chuva:g} mm em 24 h")
+    focos = dados.get("focos_24h")
+    resultado["focos_24h"] = focos
+    nivel = _nivel_por_limite(focos, regras.get("focos_24h") or {})
+    if nivel:
+        sinal = _maior(sinal, nivel)
+        resultado["fatores"].append(f"INPE: {focos} focos de calor detectados em 24 h")
+    resultado["sinal"] = sinal
+    return resultado
+
+
 def texto_modelo_fixo(resultado: dict[str, Any]) -> str:
     """Texto determinístico, usado sem IA ou quando a IA falha."""
     partes = [
@@ -300,6 +340,14 @@ def texto_modelo_fixo(resultado: dict[str, Any]) -> str:
             "Chuva prevista (Open-Meteo): "
             + ", ".join(f"{_data_br(c['data'])[:5]} {c['mm']:g} mm" for c in chuva) + "."
         )
+    for ponto in resultado.get("sace") or []:
+        if ponto.get("situacao"):
+            partes.append(f"SGB/SACE: ponto {ponto['ponto']} em situação {ponto['situacao']}"
+                          + (f", cota {ponto['cota_cm']:g} cm." if ponto.get("cota_cm") is not None else "."))
+    if resultado.get("chuva_observada_24h_mm"):
+        partes.append(f"Chuva observada em 24 h (Cemaden): {resultado['chuva_observada_24h_mm']:g} mm.")
+    if resultado.get("focos_24h"):
+        partes.append(f"Focos de calor em 24 h (INPE): {resultado['focos_24h']}.")
     if resultado.get("populacao"):
         partes.append(f"População do município: {resultado['populacao']} pessoas (IBGE 2022).")
     partes.append("Confirme nos órgãos oficiais antes de qualquer decisão.")
@@ -316,6 +364,9 @@ def fatos_para_ia(resultado: dict[str, Any]) -> dict[str, Any]:
             {"tipo": a["descricao"], "severidade": a["severidade"], "ate": _data_br(a.get("fim"))}
             for a in resultado.get("avisos") or []
         ],
+        "sace_situacao_oficial": resultado.get("sace") or [],
+        "chuva_observada_24h_mm_cemaden": resultado.get("chuva_observada_24h_mm"),
+        "focos_calor_24h_inpe": resultado.get("focos_24h"),
         "chuva_prevista_mm_por_dia": {
             _data_br(c["data"])[:5]: c["mm"] for c in resultado.get("chuva_prevista") or []
         },
@@ -422,6 +473,35 @@ def _buscar_meteorologia(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> 
     return avisos, chuva
 
 
+def _buscar_fontes_oficiais(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> dict[str, Any]:
+    """SACE por município, maior chuva de 24 h (Cemaden) e focos de 24 h (INPE); vazio sem as tabelas."""
+    regras = cfg.get("fontes_oficiais") or {}
+    dados: dict[str, Any] = {"sace": {}, "chuva_24h": {}, "focos_24h": {}, "relevantes": set()}
+    try:
+        for ponto in cliente.table("sace_pontos").select("nome,municipio_id,situacao,cota_cm,medido_em").execute().data or []:
+            if ponto.get("municipio_id"):
+                codigo = str(ponto["municipio_id"]).strip()
+                dados["sace"].setdefault(codigo, []).append(ponto)
+                if (regras.get("situacao_sace") or {}).get(str(ponto.get("situacao") or "")):
+                    dados["relevantes"].add(codigo)
+        for estacao in cliente.table("chuva_cemaden").select("municipio_id,acc24h_mm").execute().data or []:
+            if estacao.get("municipio_id") and estacao.get("acc24h_mm") is not None:
+                codigo = str(estacao["municipio_id"]).strip()
+                dados["chuva_24h"][codigo] = max(dados["chuva_24h"].get(codigo, 0), float(estacao["acc24h_mm"]))
+        desde = (agora - timedelta(hours=24)).isoformat()
+        for foco in cliente.table("focos_calor").select("municipio_id").gte("data_hora", desde).limit(20000).execute().data or []:
+            if foco.get("municipio_id"):
+                codigo = str(foco["municipio_id"]).strip()
+                dados["focos_24h"][codigo] = dados["focos_24h"].get(codigo, 0) + 1
+    except Exception:
+        LOGGER.warning("Fontes SACE/Cemaden/INPE indisponíveis (aplique a migration 202610140010)", exc_info=True)
+        return dados
+    for chave, limite in (("chuva_24h", "chuva_observada_24h_mm"), ("focos_24h", "focos_24h")):
+        corte = (regras.get(limite) or {}).get("atencao", float("inf"))
+        dados["relevantes"].update(c for c, v in dados[chave].items() if v >= corte)
+    return dados
+
+
 def _buscar_dados(cliente: Any, agora: datetime, cfg: dict[str, Any]) -> tuple[list, dict, dict]:
     estacoes = _ler_estacoes(cliente)
     municipios = {
@@ -477,12 +557,20 @@ def executar_robo(
     avisos, chuva = _buscar_meteorologia(cliente, agora, cfg)
     for municipio_id in avisos:  # municípios sem estação, mas com aviso oficial do INMET
         por_municipio.setdefault(municipio_id, [])
+    oficiais = _buscar_fontes_oficiais(cliente, agora, cfg)
+    for municipio_id in oficiais.get("relevantes", set()):  # SACE/Cemaden/INPE acima do limite
+        por_municipio.setdefault(municipio_id, [])
 
     resultados = []
     for municipio_id, analises in por_municipio.items():
         municipio = municipios.get(municipio_id, {"id_ibge": municipio_id, "nome": municipio_id})
         resultado = consolidar_municipio(municipio, analises)
         aplicar_meteorologia(resultado, avisos.get(municipio_id, []), chuva.get(municipio_id, []), cfg)
+        aplicar_fontes_oficiais(resultado, {
+            "sace": oficiais["sace"].get(municipio_id, []),
+            "chuva_24h": oficiais["chuva_24h"].get(municipio_id),
+            "focos_24h": oficiais["focos_24h"].get(municipio_id),
+        }, cfg)
         resultados.append((municipio_id, analises, resultado))
     # Maior risco primeiro: a cota gratuita de IA vai para os municípios mais críticos.
     resultados.sort(key=lambda item: (-ORDEM_SINAIS.index(item[2]["sinal"]), item[0]))
@@ -523,6 +611,9 @@ def executar_robo(
                     ] + [
                         {"nome": f"INMET aviso: {a['descricao']} ({a['severidade']})", "data_hora_leitura": a.get("fim")}
                         for a in resultado.get("avisos") or []
+                    ] + [
+                        {"nome": f"SGB/SACE {p['ponto']}: {p['situacao']}", "data_hora_leitura": p.get("medido_em")}
+                        for p in resultado.get("sace") or [] if p.get("situacao")
                     ],
                     "data_hora_leitura_referencia": resultado["data_hora_leitura_referencia"],
                 }

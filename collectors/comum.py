@@ -170,3 +170,26 @@ def coletar_configurado(
         nome_fonte=configuracao["nome"],
         campos=configuracao["campos"],
     )
+
+
+def registrar_saude(cliente: Any, nome_fonte: str, *, registros: int, erro: str | None = None) -> None:
+    """Atualiza public.fontes para coletores dedicados (status, verificação, erro, última coleta)."""
+    agora = datetime.now(timezone.utc).isoformat()
+    estado: dict[str, Any] = {
+        "status": "operacional" if registros and not erro else ("erro" if erro else "sem_dados"),
+        "ultima_verificacao": agora,
+        "ultimo_erro": (erro or None) and erro[:500],
+    }
+    if registros:
+        estado["ultima_coleta"] = agora
+    cliente.table("fontes").update(estado).eq("nome", nome_fonte).execute()
+
+
+def cliente_servico() -> Any:
+    """Cliente Supabase com a chave de serviço (só no GitHub Actions/ambiente confiável)."""
+    from supabase import create_client
+
+    url, chave = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not chave:
+        raise RuntimeError("Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY")
+    return create_client(url, chave)

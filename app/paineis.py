@@ -792,9 +792,28 @@ def renderizar_monitoramento() -> None:
         st.subheader("Leituras recentes")
         st.dataframe(linhas_leituras, hide_index=True, width="stretch")
         _renderizar_comparacao_historica(cliente, leituras.data or [])
+        st.subheader("Situação oficial dos pontos de alerta (SGB/SACE)")
+        try:
+            sace = cliente.table("sace_pontos").select("*").order("nome").execute().data or []
+        except Exception:
+            sace = []
+        linhas_sace = [
+            {"Ponto": s["nome"], "Situação oficial": s.get("situacao"), "Cota (cm)": s.get("cota_cm"),
+             "Medição": str(s.get("medido_em") or "")[:16].replace("T", " "),
+             "Município (AM)": nomes_mun.get(str(s.get("municipio_id") or "").strip(), "fora do AM / sem sede próxima"),
+             "Relatório": s.get("link")}
+            for s in sace
+        ]
+        if linhas_sace:
+            st.dataframe(linhas_sace, hide_index=True, width="stretch",
+                         column_config={"Relatório": st.column_config.LinkColumn("Relatório", display_text="abrir")})
+            st.caption("Fonte: SGB/SACE — Sistema de Alerta Hidrológico da bacia do Amazonas (situação oficial).")
+        else:
+            st.info("Sem dados do SACE (aplique a migration 202610140010 e rode a coleta).")
         painel_relatorio(
             "Relatório da sala de monitoramento",
-            [("Saúde das fontes", linhas_fontes), ("Estações", linhas_estacoes), ("Leituras recentes", linhas_leituras)],
+            [("Saúde das fontes", linhas_fontes), ("Estações", linhas_estacoes), ("Leituras recentes", linhas_leituras),
+             ("Situação oficial SACE", [{k: v for k, v in l.items() if k != "Relatório"} for l in linhas_sace])],
             resumo={"Estações cadastradas": len(linhas_estacoes), "Sem leitura de nível recente": sem_leitura,
                     "Fonte hidrológica": "ANA telemetria (horário UTC-03:00 inferido)"},
         )

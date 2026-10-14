@@ -7,24 +7,18 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from collectors.ana import coletar as coletar_ana
-from collectors.cemaden import coletar as coletar_cemaden
 from collectors.ibge import coletar as coletar_ibge
-from collectors.inep import coletar as coletar_inep
-from collectors.inpe import coletar as coletar_inpe
-from collectors.sgb import coletar as coletar_sgb
 from collectors.comum import ConfiguracaoPendenteError, carregar_configuracao
 
 LOGGER = logging.getLogger(__name__)
 
+# INPE, Cemaden, SGB/SACE, CNES e INMET têm coletores dedicados (python -m collectors.<fonte>)
+# que registram a própria saúde; o INEP está indisponível (servidor recusa conexões).
 COLETORES: dict[str, Callable[..., list[dict[str, Any]]]] = {
     "ana": coletar_ana,
-    "inpe": coletar_inpe,
     # "inmet": coletado por python -m collectors.inmet (avisos/previsão; registra a própria saúde).
-    "sgb": coletar_sgb,
-    "cemaden": coletar_cemaden,
     "ibge": coletar_ibge,
     # "cnes": importado semanalmente por python -m collectors.cnes (registra a própria saúde).
-    "inep": coletar_inep,
 }
 
 

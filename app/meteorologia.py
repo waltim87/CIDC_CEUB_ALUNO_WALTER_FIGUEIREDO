@@ -134,6 +134,64 @@ def _chuva_observada(cliente: Any, nomes: dict[str, str]) -> list[dict]:
     return linhas
 
 
+def _queimadas(cliente: Any, nomes: dict[str, str]) -> list[dict]:
+    """Focos de calor do INPE nas últimas 24 h: totais, ranking e mapa."""
+    import pydeck as pdk
+    from app.visual import grafico_barras
+
+    desde = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    focos = (cliente.table("focos_calor").select("lat,lon,municipio_id,satelite,risco_fogo,dias_sem_chuva,frp,data_hora")
+             .gte("data_hora", desde).limit(20000).execute().data or [])
+    if not focos:
+        st.info("Nenhum foco de calor do INPE nas últimas 24 h (ou coleta ainda não executada).")
+        return []
+    por_municipio: dict[str, list] = {}
+    for f in focos:
+        por_municipio.setdefault(str(f.get("municipio_id") or "").strip(), []).append(f)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Focos (24 h)", len(focos))
+    c2.metric("Municípios com focos", len([k for k in por_municipio if k]))
+    c3.metric("Risco de fogo máximo", f"{max((f.get('risco_fogo') or 0) for f in focos):.2f}")
+    linhas = sorted(
+        [{"Município": nomes.get(k, k or "não identificado"), "Focos (24 h)": len(v),
+          "Risco de fogo máx.": round(max((f.get("risco_fogo") or 0) for f in v), 2),
+          "Dias sem chuva (máx.)": max((f.get("dias_sem_chuva") or 0) for f in v)}
+         for k, v in por_municipio.items()],
+        key=lambda l: -l["Focos (24 h)"],
+    )
+    grafico_barras({l["Município"]: l["Focos (24 h)"] for l in linhas[:15]}, "Municípios com mais focos (24 h)")
+    pontos = [{"lat": f["lat"], "lon": f["lon"], "risco": f.get("risco_fogo") or 0,
+               "detalhe": f"{nomes.get(str(f.get('municipio_id') or '').strip(), '')} · risco {f.get('risco_fogo')} · "
+                          f"{f.get('satelite')} · {str(f.get('data_hora'))[:16]} UTC"} for f in focos]
+    st.pydeck_chart(pdk.Deck(
+        layers=[pdk.Layer("ScatterplotLayer", data=pontos, get_position="[lon, lat]",
+                          get_fill_color="[230, 80 + 120 * (1 - risco), 20, 200]", get_radius=1500,
+                          radius_min_pixels=2, pickable=True)],
+        initial_view_state=pdk.ViewState(latitude=-4.6, longitude=-63.5, zoom=4.7),
+        map_provider="carto", map_style="light", tooltip={"html": "{detalhe}"},
+    ), height=420)
+    st.dataframe(linhas, hide_index=True, width="stretch")
+    st.caption("Fonte: INPE — Programa Queimadas (CSV diário). Detecções de todos os satélites: o mesmo fogo pode "
+               "aparecer mais de uma vez. Mapa © OpenStreetMap / CARTO.")
+    return linhas
+
+
+def _pluviometros(cliente: Any, nomes: dict[str, str]) -> list[dict]:
+    dados = cliente.table("chuva_cemaden").select("*").execute().data or []
+    linhas = sorted(
+        [{"Pluviômetro": d["nome"], "Município": nomes.get(str(d.get("municipio_id") or "").strip(), ""),
+          "1 h (mm)": d.get("acc1h_mm"), "24 h (mm)": d.get("acc24h_mm"), "72 h (mm)": d.get("acc72h_mm"),
+          "96 h (mm)": d.get("acc96h_mm"), "Última leitura (UTC)": str(d.get("medido_em") or "")[:16].replace("T", " ")}
+         for d in dados],
+        key=lambda l: -(l["24 h (mm)"] or 0),
+    )
+    if not linhas:
+        st.info("Sem dados do Cemaden (coleta ainda não executada).")
+    st.dataframe(linhas, hide_index=True, width="stretch")
+    st.caption("Fonte: Cemaden — pluviômetros automáticos (mapa interativo). '—' = sem dado no período.")
+    return linhas
+
+
 def renderizar_meteorologia() -> None:
     from app.comum import carregar_municipios, exigir_perfil, mostrar_aviso
     from app.relatorio_menu import painel_relatorio
@@ -170,9 +228,22 @@ def renderizar_meteorologia() -> None:
         if maior:
             st.caption(f"{nomes.get(str(maior['municipio_id']).strip())} em {_data_br(maior['data'])} (Open-Meteo)")
 
-    aba_avisos, aba_mapa, aba_previsao, aba_chuva = st.tabs(
-        ["⚠️ Avisos INMET", "🗺️ Mapa", "📅 Previsão por município", "🌧️ Chuva prevista e observada"]
+    aba_avisos, aba_mapa, aba_previsao, aba_chuva, aba_fogo, aba_cemaden = st.tabs(
+        ["⚠️ Avisos INMET", "🗺️ Mapa", "📅 Previsão por município", "🌧️ Chuva prevista e observada",
+         "🔥 Queimadas (INPE)", "📡 Pluviômetros Cemaden"]
     )
+    with aba_fogo:
+        try:
+            linhas_fogo = _queimadas(cliente, nomes)
+        except Exception as erro:
+            linhas_fogo = []
+            st.warning(f"Queimadas indisponíveis (aplique a migration 202610140010): {erro}")
+    with aba_cemaden:
+        try:
+            linhas_cemaden = _pluviometros(cliente, nomes)
+        except Exception as erro:
+            linhas_cemaden = []
+            st.warning(f"Cemaden indisponível (aplique a migration 202610140010): {erro}")
     with aba_avisos:
         linhas_avisos = cartoes_avisos(avisos, nomes) if avisos else []
         if not avisos:
@@ -207,9 +278,11 @@ def renderizar_meteorologia() -> None:
         "Relatório meteorológico",
         [("Avisos INMET vigentes", linhas_avisos), (f"Previsão — {nomes.get(escolhido)}", linhas_previsao),
          ("Chuva prevista acumulada (mm)", [{"Município": k, "Chuva prevista (mm)": v} for k, v in top.items()]),
-         ("Chuva observada 24 h (ANA)", linhas_chuva)],
+         ("Chuva observada 24 h (ANA)", linhas_chuva), ("Focos de calor 24 h (INPE)", linhas_fogo),
+         ("Pluviômetros Cemaden", linhas_cemaden)],
         resumo={"Municípios com aviso INMET": len(com_aviso), "Pior severidade": pior,
-                "Fontes": "INMET (avisos e previsão), Open-Meteo (chuva prevista), ANA (chuva observada)"},
+                "Fontes": "INMET (avisos e previsão), Open-Meteo (chuva prevista), ANA e Cemaden (chuva observada), "
+                          "INPE (focos de calor)"},
     )
 
 

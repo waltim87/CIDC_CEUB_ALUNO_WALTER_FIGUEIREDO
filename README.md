@@ -412,3 +412,14 @@ modelo de texto fixo.
   coordenadores de abrigo; matriz do que cada perfil pode fazer.
 - **Dados de teste**: `db/testes/dados_teste_abrigos_familias_relatos.sql` (5 abrigos, 100 famílias,
   desaparecidos, 10 relatos, tudo marcado TESTE); apagar com `db/testes/limpar_dados_teste.sql`.
+
+## Etapa 14 — fontes pendentes ativadas (INPE, Cemaden, SGB/SACE)
+
+- **INPE Queimadas** (`python -m collectors.inpe`): focos de calor do AM do CSV diário oficial,
+  com risco de fogo, dias sem chuva e FRP; mantém 30 dias.
+- **Cemaden** (`python -m collectors.cemaden`): 95 pluviômetros do AM com acumulados de 1 h a 96 h.
+- **SGB/SACE** (`python -m collectors.sgb`): situação oficial (Normal/Atenção/Alerta/Inundação), cota
+  e horário dos 23 pontos de alerta da bacia do Amazonas, associados à sede municipal mais próxima.
+- Robô: situação SACE, chuva observada (Cemaden) e focos (INPE) elevam o sinal (`config/robo.yaml`).
+- **INEP**: indisponível — o servidor recusa conexões automatizadas; escolas podem ser cadastradas
+  manualmente em Gestão municipal → Infraestrutura. Migration `202610140010`.

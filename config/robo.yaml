@@ -56,3 +56,21 @@ meteorologia:
     atencao: 50
     alerta: 100
   dias_previsao: 3
+
+# Outras fontes oficiais (hipóteses de corte; ajuste com a Defesa Civil):
+# - SGB/SACE: situação oficial do ponto de alerta mais próximo do município.
+# - Cemaden: maior chuva observada em 24 h entre os pluviômetros do município (mm).
+# - INPE: focos de calor (detecções de todos os satélites) nas últimas 24 h no município.
+fontes_oficiais:
+  situacao_sace:
+    "Atenção": atencao
+    "Alerta": alerta
+    "Inundação": alto
+    "Inundação Severa": alto
+    "Emergência": alto
+  chuva_observada_24h_mm:
+    atencao: 50
+    alerta: 100
+  focos_24h:
+    atencao: 50
+    alerta: 150
