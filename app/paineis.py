@@ -68,14 +68,6 @@ from core.relatorios import (
     totais_detalhados,
 )
 
-EIXOS = {
-    "prevencao": "Prevenção",
-    "mitigacao": "Mitigação",
-    "preparacao": "Preparação",
-    "resposta": "Resposta",
-    "recuperacao": "Recuperação",
-}
-STATUS_ACAO = ["pendente", "em_andamento", "concluida"]
 
 PERFIS_GESTAO = {
     "gestor_nacional",
@@ -598,7 +590,10 @@ def renderizar_coordenador() -> None:
         with abas[5]:
             situacao = bloco_situacao(cliente, municipio_id, editavel)
         with abas[6]:
-            tarefas = _renderizar_acoes(cliente, municipio_id, editavel)
+            from app.plano import bloco_tarefas
+
+            st.caption("Tarefas dos 5 eixos. O protocolo e o acionamento ficam em **Plano de contingência**.")
+            tarefas = bloco_tarefas(cliente, perfil, municipio_id, editavel)
         voluntarios: list[dict[str, Any]] = []
         if editavel:
             with abas[7]:
@@ -622,106 +617,6 @@ def renderizar_coordenador() -> None:
         )
     except Exception as erro:
         st.error(f"Não foi possível carregar a gestão municipal: {erro}")
-
-
-def _renderizar_acoes(cliente: Any, municipio_id: str, editavel: bool = True) -> list[dict[str, Any]]:
-    """Tarefas por eixo do PN-PDC, vinculadas a alertas do município."""
-    st.subheader("Tarefas por eixo")
-    alertas = (
-        cliente.table("alertas")
-        .select("id,classe,criado_em,status")
-        .eq("municipio_id", municipio_id)
-        .order("criado_em", desc=True)
-        .limit(50)
-        .execute()
-        .data
-        or []
-    )
-    if not alertas:
-        st.info("Sem alertas neste município; as tarefas são vinculadas a um alerta.")
-        return []
-    ids = [alerta["id"] for alerta in alertas]
-    acoes = (
-        cliente.table("acoes")
-        .select("id,alerta_id,eixo,descricao,prazo,status")
-        .in_("alerta_id", ids)
-        .order("prazo")
-        .limit(500)
-        .execute()
-        .data
-        or []
-    )
-    for codigo, rotulo in EIXOS.items():
-        do_eixo = [acao for acao in acoes if acao["eixo"] == codigo]
-        with st.expander(f"{rotulo} ({len(do_eixo)})"):
-            if do_eixo:
-                st.dataframe(
-                    [
-                        {
-                            "Descrição": a["descricao"],
-                            "Prazo": a["prazo"],
-                            "Status": a["status"],
-                        }
-                        for a in do_eixo
-                    ],
-                    hide_index=True,
-                    width="stretch",
-                )
-            else:
-                st.caption("Nenhuma tarefa neste eixo.")
-    linhas_tarefas = [
-        {"Eixo": EIXOS.get(a["eixo"], a["eixo"]), "Descrição": a["descricao"],
-         "Prazo": a.get("prazo"), "Status": a["status"]}
-        for a in acoes
-    ]
-    if not editavel:
-        return linhas_tarefas
-    por_id = {alerta["id"]: alerta for alerta in alertas}
-    with st.form("nova-acao"):
-        alerta_id = st.selectbox(
-            "Alerta de origem",
-            ids,
-            format_func=lambda i: f"{por_id[i]['classe']} · {str(por_id[i]['criado_em'])[:16]} · {por_id[i]['status']}",
-        )
-        eixo = st.selectbox("Eixo", list(EIXOS), format_func=lambda c: EIXOS[c])
-        descricao = st.text_input("Descrição da tarefa", max_chars=300).strip()
-        criar = st.form_submit_button("Criar tarefa")
-    if criar:
-        if not descricao:
-            st.error("Informe a descrição da tarefa.")
-        else:
-            inserida = (
-                cliente.table("acoes")
-                .insert({"alerta_id": alerta_id, "eixo": eixo, "descricao": descricao})
-                .execute()
-            )
-            if not inserida.data:
-                raise RuntimeError("Tarefa não criada; verifique as permissões.")
-            st.success("Tarefa criada.")
-            st.rerun()
-    if acoes:
-        por_acao = {a["id"]: a for a in acoes}
-        with st.form("atualizar-acao"):
-            acao_id = st.selectbox(
-                "Atualizar tarefa",
-                list(por_acao),
-                format_func=lambda i: f"{EIXOS[por_acao[i]['eixo']]} · {por_acao[i]['descricao'][:50]}",
-            )
-            novo = st.selectbox("Novo status", STATUS_ACAO)
-            salvar = st.form_submit_button("Salvar status")
-        if salvar:
-            alterada = (
-                cliente.table("acoes").update({"status": novo}).eq("id", acao_id).execute()
-            )
-            if not alterada.data:
-                raise RuntimeError("Tarefa não alterada; verifique as permissões.")
-            st.success("Status atualizado.")
-            st.rerun()
-    return [
-        {"Eixo": EIXOS.get(a["eixo"], a["eixo"]), "Descrição": a["descricao"],
-         "Prazo": a.get("prazo"), "Status": a["status"]}
-        for a in acoes
-    ]
 
 
 def renderizar_monitoramento() -> None:

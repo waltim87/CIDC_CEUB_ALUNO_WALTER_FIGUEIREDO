@@ -5,6 +5,8 @@ delete from public.familias_abrigadas where observacoes like '[TESTE]%';   -- me
 delete from public.abrigos where nome like '[TESTE]%';                      -- designações em cascata
 delete from public.relatos where descricao like '[TESTE]%';                -- votos em cascata
 delete from public.chat_mensagens where texto like '[TESTE]%';
+delete from public.acoes where acionamento_id in (select id from public.plano_acionamentos where observacao like '[TESTE]%');
+delete from public.plano_acionamentos where observacao like '[TESTE]%';
 delete from public.chat_canais where nome like '[TESTE]%';                 -- membros e mensagens em cascata
 delete from public.comunidades where nome like '[TESTE]%';
 commit;

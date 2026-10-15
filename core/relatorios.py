@@ -353,7 +353,7 @@ _CONSULTAS = {
     "recursos": ("recursos", "municipio_id,tipo,quantidade", None),
     "abrigos": ("abrigos", "municipio_id,capacidade,ocupacao", None),
     "afetados": ("pessoas_afetadas", "comunidade_id,familias,pessoas,data", "data"),
-    "acoes": ("acoes", "alerta_id,status", None),
+    "acoes": ("acoes", "alerta_id,municipio_id,status", None),
     "alertas": ("alertas", "id,municipio_id,status", "criado_em"),
 }
 
@@ -439,7 +439,8 @@ def detalhar_situacao(
     }
     tarefas: dict[str, list[str]] = {}
     for acao in dados.get("acoes", []):
-        cod = alerta_para_municipio.get(str(acao.get("alerta_id")))
+        # Tarefas pertencem ao município (migration 202610140013); antes, só via alerta.
+        cod = str(acao.get("municipio_id") or "").strip() or alerta_para_municipio.get(str(acao.get("alerta_id")))
         if cod:
             tarefas.setdefault(cod, []).append(str(acao.get("status")))
 
