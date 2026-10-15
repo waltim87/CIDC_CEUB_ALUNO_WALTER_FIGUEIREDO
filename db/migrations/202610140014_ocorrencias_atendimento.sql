@@ -167,15 +167,16 @@ begin
             or p_prioridade is not null or p_assumir) then
         raise exception 'Ocorrência encerrada; a coordenação pode reabrir';
     end if;
-    v_coord := public.cidc_pode_operar_municipio(o.municipio_id);
-    v_equipe := o.responsavel_id = v_eu
-        or (o.equipe_funcao is not null and o.equipe_funcao = public.cidc_perfil_atual()
-            and public.cidc_municipio_atual() = o.municipio_id);
+    -- coalesce: comparação com valor vazio (sem responsável) dá NULL, e "not NULL" não barraria.
+    v_coord := coalesce(public.cidc_pode_operar_municipio(o.municipio_id), false);
+    v_equipe := coalesce(o.responsavel_id = v_eu, false)
+        or coalesce(o.equipe_funcao = public.cidc_perfil_atual()
+                    and public.cidc_municipio_atual() = o.municipio_id, false);
 
     if p_assumir then
-        if not (v_coord or (public.cidc_municipio_atual() = o.municipio_id
+        if not (v_coord or coalesce(public.cidc_municipio_atual() = o.municipio_id
                 and public.cidc_perfil_atual() in ('agente_campo', 'saude_assistencia', 'logistica_abastecimento',
-                                                   'operador_monitoramento', 'voluntario'))) then
+                                                   'operador_monitoramento', 'voluntario'), false)) then
             raise exception 'Só equipes e voluntários do município podem assumir';
         end if;
         select nome into v_nome from public.usuarios where id = v_eu;

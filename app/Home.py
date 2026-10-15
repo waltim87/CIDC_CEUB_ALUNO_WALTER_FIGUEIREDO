@@ -36,6 +36,7 @@ from app.meteorologia import renderizar_meteorologia
 from app.familias import renderizar_familias, usuario_coordena_abrigo
 from app.permissoes import renderizar_permissoes
 from app.chat import PERFIS_CHAT, renderizar_chat
+from app.ajuda import PERFIS_TELA as PERFIS_AJUDA, renderizar_ajuda
 from app.ocorrencias import PERFIS_TELA as PERFIS_OCORRENCIAS, renderizar_ocorrencias
 from app.plano import PERFIS_EQUIPE, PERFIS_LEITURA, renderizar_minhas_tarefas, renderizar_plano
 
@@ -105,6 +106,8 @@ else:
         paginas.insert(1, st.Page(renderizar_relatos, title="Relatos de campo", icon="📢"))
     if nome_perfil in PERFIS_EQUIPE and nome_perfil != "coordenador_municipal":
         paginas.insert(1, st.Page(renderizar_minhas_tarefas, title="Minhas tarefas", icon="✅"))
+    if nome_perfil in PERFIS_AJUDA or usuario_coordena_abrigo(cliente, perfil["id"]):
+        paginas.insert(1, st.Page(renderizar_ajuda, title="Ajuda humanitária", icon="📦"))
     if nome_perfil in PERFIS_OCORRENCIAS:
         paginas.insert(1, st.Page(renderizar_ocorrencias, title="Ocorrências", icon="🚑"))
     if nome_perfil in PERFIS_LEITURA:
