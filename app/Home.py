@@ -87,6 +87,12 @@ else:
         except Exception as erro:
             st.error(f"A sessão local foi encerrada, mas o logout remoto falhou: {erro}")
 
+    if st.sidebar.button("🔄 Atualizar dados", width="stretch",
+                         help="Os dados das coletas ficam guardados por até 10 minutos para o site abrir rápido."):
+        st.cache_data.clear()
+        st.session_state.pop("cidc_perfil", None)
+        st.rerun()
+
     paginas = [
         st.Page(renderizar_painel_principal, title="Painel principal", icon="📊"),
         pagina_publica,

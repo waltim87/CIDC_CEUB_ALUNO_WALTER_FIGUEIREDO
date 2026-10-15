@@ -24,11 +24,24 @@ def _hora_br(valor: Any) -> str:
 
 
 def carregar_avisos(cliente: Any) -> list[dict[str, Any]]:
+    return _avisos(cliente)
+
+
+# Avisos, previsão e focos do INPE têm leitura pública: um cache para todos (10 min).
+@st.cache_data(ttl=600, show_spinner=False)
+def _avisos(_cliente: Any) -> list[dict[str, Any]]:
+    cliente = _cliente
     agora = datetime.now(timezone.utc).isoformat()
     return cliente.table("avisos_meteorologicos").select("*").gte("fim", agora).order("inicio").limit(5000).execute().data or []
 
 
 def carregar_previsao(cliente: Any, municipio_id: str | None = None) -> list[dict[str, Any]]:
+    return _previsao(cliente, municipio_id)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _previsao(_cliente: Any, municipio_id: str | None) -> list[dict[str, Any]]:
+    cliente = _cliente
     consulta = cliente.table("previsao_tempo").select("*").gte("data", date.today().isoformat())
     if municipio_id:
         consulta = consulta.eq("municipio_id", municipio_id)
@@ -118,13 +131,11 @@ def _mapa_avisos(avisos: list[dict], previsao: list[dict], municipios: list[dict
 
 def _chuva_observada(cliente: Any, nomes: dict[str, str]) -> list[dict]:
     """Soma das últimas 24 h dos pluviômetros das estações ANA."""
-    desde = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    estacoes = {e["id"]: e for e in cliente.table("estacoes").select("id,nome,municipio_id").execute().data or []}
+    from app.comum import chave_usuario
+
+    estacoes, leituras = _chuva_24h(cliente, chave_usuario())
     soma: dict[str, float] = {}
-    for leitura in (
-        cliente.table("leituras").select("estacao_id,chuva_mm").gte("data_hora_leitura", desde)
-        .not_.is_("chuva_mm", "null").limit(10000).execute().data or []
-    ):
+    for leitura in leituras:
         soma[leitura["estacao_id"]] = soma.get(leitura["estacao_id"], 0) + float(leitura["chuva_mm"] or 0)
     linhas = sorted(
         [{"Estação": estacoes[i]["nome"], "Município": nomes.get(str(estacoes[i].get("municipio_id") or "").strip()),
@@ -134,14 +145,29 @@ def _chuva_observada(cliente: Any, nomes: dict[str, str]) -> list[dict]:
     return linhas
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _chuva_24h(_cliente: Any, usuario: str) -> tuple[dict[str, dict], list[dict]]:
+    """Estações e leituras de chuva (RLS por perfil: cache por usuário)."""
+    desde = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    estacoes = {e["id"]: e for e in _cliente.table("estacoes").select("id,nome,municipio_id").execute().data or []}
+    leituras = (_cliente.table("leituras").select("estacao_id,chuva_mm").gte("data_hora_leitura", desde)
+                .not_.is_("chuva_mm", "null").limit(10000).execute().data or [])
+    return estacoes, leituras
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _focos_24h(_cliente: Any) -> list[dict]:
+    desde = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    return (_cliente.table("focos_calor").select("lat,lon,municipio_id,satelite,risco_fogo,dias_sem_chuva,frp,data_hora")
+            .gte("data_hora", desde).limit(20000).execute().data or [])
+
+
 def _queimadas(cliente: Any, nomes: dict[str, str]) -> list[dict]:
     """Focos de calor do INPE nas últimas 24 h: totais, ranking e mapa."""
     import pydeck as pdk
     from app.visual import grafico_barras
 
-    desde = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    focos = (cliente.table("focos_calor").select("lat,lon,municipio_id,satelite,risco_fogo,dias_sem_chuva,frp,data_hora")
-             .gte("data_hora", desde).limit(20000).execute().data or [])
+    focos = _focos_24h(cliente)
     if not focos:
         st.info("Nenhum foco de calor do INPE nas últimas 24 h (ou coleta ainda não executada).")
         return []
@@ -207,7 +233,9 @@ def renderizar_meteorologia() -> None:
         })
         municipios_dict = carregar_municipios(cliente)
         nomes = {c: m["nome"] for c, m in municipios_dict.items()}
-        municipios = cliente.table("municipios").select("id_ibge,nome,latitude,longitude").execute().data or []
+        from app.visual import carregar_municipios_mapa
+
+        municipios = carregar_municipios_mapa(cliente)
         avisos = carregar_avisos(cliente)
         previsao = carregar_previsao(cliente)
     except Exception as erro:

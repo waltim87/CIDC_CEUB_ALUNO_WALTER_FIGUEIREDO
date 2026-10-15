@@ -14,6 +14,16 @@ AVISO_PROTOTIPO = (
 )
 
 
+# Dados que só mudam com a coleta (a cada 3 h) ficam em cache por alguns minutos.
+# Tabelas públicas: cache único. Tabelas com RLS por perfil: cache separado por usuário.
+TTL_COLETA_S = 600
+TTL_CADASTRO_S = 3600
+
+
+def chave_usuario() -> str:
+    return (st.session_state.get("supabase_auth") or {}).get("user_id") or "anonimo"
+
+
 def cliente_supabase() -> Any:
     return cliente_publico()
 
@@ -37,6 +47,13 @@ def carregar_pesos(cliente: Any) -> tuple[dict[str, float], bool]:
 
 
 def carregar_municipios(cliente: Any) -> dict[str, dict[str, str]]:
+    return _municipios(cliente)
+
+
+@st.cache_data(ttl=TTL_CADASTRO_S, show_spinner=False)
+def _municipios(_cliente: Any) -> dict[str, dict[str, str]]:
+    # municipios tem leitura pública (RLS using true): o mesmo resultado para todos.
+    cliente = _cliente
     resultado = (
         cliente.table("municipios")
         .select("id_ibge,nome,uf")

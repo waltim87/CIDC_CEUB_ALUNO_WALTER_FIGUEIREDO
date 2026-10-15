@@ -64,21 +64,29 @@ def _hora_local(valor: str | None) -> str:
 # ---------------------------------------------------------------- dados
 def carregar_analises(cliente: Any, limite: int = 1000) -> dict[str, dict[str, Any]]:
     """Análise mais recente do robô por município (respeita o RLS do usuário)."""
+    from app.comum import chave_usuario
+
     try:
-        linhas = (
-            cliente.table("analises_risco")
-            .select(
-                "municipio_id,gerado_em,sinal,direcao,texto,metodo,modelo,"
-                "fatores_json,estacoes_json,fontes_json,data_hora_leitura_referencia"
-            )
-            .order("gerado_em", desc=True)
-            .limit(limite)
-            .execute()
-            .data
-            or []
-        )
+        return _analises(cliente, chave_usuario(), limite)
     except Exception:
         return {}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _analises(_cliente: Any, usuario: str, limite: int) -> dict[str, dict[str, Any]]:
+    # analises_risco tem RLS por perfil: cache separado por usuário.
+    linhas = (
+        _cliente.table("analises_risco")
+        .select(
+            "municipio_id,gerado_em,sinal,direcao,texto,metodo,modelo,"
+            "fatores_json,estacoes_json,fontes_json,data_hora_leitura_referencia"
+        )
+        .order("gerado_em", desc=True)
+        .limit(limite)
+        .execute()
+        .data
+        or []
+    )
     ultimas: dict[str, dict[str, Any]] = {}
     for linha in linhas:
         ultimas.setdefault(str(linha["municipio_id"]).strip(), linha)
@@ -87,20 +95,34 @@ def carregar_analises(cliente: Any, limite: int = 1000) -> dict[str, dict[str, A
 
 def carregar_municipios_mapa(cliente: Any) -> list[dict[str, Any]]:
     try:
-        return (
-            cliente.table("municipios")
-            .select("id_ibge,nome,uf,populacao,latitude,longitude")
-            .limit(1000)
-            .execute()
-            .data
-            or []
-        )
+        return _municipios_mapa(cliente)
     except Exception:
         return []
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _municipios_mapa(_cliente: Any) -> list[dict[str, Any]]:
+    # municipios tem leitura pública: o mesmo resultado para todos.
+    return (
+        _cliente.table("municipios")
+        .select("id_ibge,nome,uf,populacao,latitude,longitude")
+        .limit(1000)
+        .execute()
+        .data
+        or []
+    )
+
+
 def carregar_series(cliente: Any, horas: int = 72) -> list[dict[str, Any]]:
     """Leituras de nível das últimas ``horas`` com o nome da estação."""
+    from app.comum import chave_usuario
+
+    return _series(cliente, chave_usuario(), horas)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _series(_cliente: Any, usuario: str, horas: int) -> list[dict[str, Any]]:
+    cliente = _cliente  # estações e leituras têm RLS por perfil: cache por usuário
     limite = (datetime.now(timezone.utc) - timedelta(hours=horas)).isoformat()
     estacoes = {
         e["id"]: e

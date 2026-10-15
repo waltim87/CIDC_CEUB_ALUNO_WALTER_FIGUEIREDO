@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from streamlit.errors import StreamlitSecretNotFoundError
 
 
+# Perfil e cliente ficam guardados na sessão do navegador; mudanças de permissão valem em até 5 min.
+VALIDADE_PERFIL_S = 300
 URL_APP_PADRAO = "https://sistematizacao-defesa-civil-walter-ceub-eng-ia.streamlit.app"
 
 
@@ -47,8 +49,22 @@ def cliente_publico() -> Any:
         )
     from supabase import create_client
 
-    cliente = create_client(url, chave)
     sessao_salva = st.session_state.get("supabase_auth")
+    guardado = st.session_state.get("_cliente_supabase")
+    if sessao_salva and guardado and guardado[0] == sessao_salva["user_id"]:
+        # Mesmo cliente a cada clique: evita reconectar e conferir o usuário no servidor de novo.
+        # get_session() é local e só renova o token quando ele está para expirar.
+        try:
+            atual = guardado[1].auth.get_session()
+        except Exception:
+            atual = None
+        if atual:
+            sessao_salva.update(access_token=atual.access_token, refresh_token=atual.refresh_token)
+            return guardado[1]
+        st.session_state.pop("_cliente_supabase", None)
+
+    # Sem login, um cliente novo por uso: o login/cadastro altera o cliente e ele não pode ser compartilhado.
+    cliente = create_client(url, chave)
     if sessao_salva:
         try:
             cliente.auth.set_session(
@@ -62,6 +78,7 @@ def cliente_publico() -> Any:
                     "refresh_token": sessao_atual.refresh_token,
                     "user_id": sessao_atual.user.id,
                 }
+                st.session_state["_cliente_supabase"] = (sessao_atual.user.id, cliente)
             else:
                 st.session_state.pop("supabase_auth", None)
                 st.session_state.pop("cidc_perfil", None)
@@ -80,6 +97,13 @@ def obter_perfil(cliente: Any) -> dict[str, Any] | None:
         return None
 
     usuario_id = sessao.user.id
+    guardado = st.session_state.get("cidc_perfil")
+    if (
+        guardado
+        and guardado.get("auth_id") == usuario_id
+        and time.time() - st.session_state.get("_cidc_perfil_em", 0) < VALIDADE_PERFIL_S
+    ):
+        return guardado
 
     def consultar() -> Any:
         return (
@@ -121,6 +145,7 @@ def obter_perfil(cliente: Any) -> dict[str, Any] | None:
         perfil["municipio_id"].strip() if perfil.get("municipio_id") else None
     )
     st.session_state["cidc_perfil"] = perfil
+    st.session_state["_cidc_perfil_em"] = time.time()
     return perfil
 
 
@@ -131,6 +156,7 @@ def _guardar_sessao(access_token: str, refresh_token: str, user_id: str) -> None
         "user_id": user_id,
     }
     st.session_state.pop("cidc_perfil", None)
+    st.session_state.pop("_cliente_supabase", None)
 
 
 # ---------------------------------------------------------------- login com Google
@@ -221,8 +247,8 @@ def encerrar_sessao(cliente: Any) -> None:
     try:
         cliente.auth.sign_out()
     finally:
-        st.session_state.pop("supabase_auth", None)
-        st.session_state.pop("cidc_perfil", None)
+        for chave in ("supabase_auth", "cidc_perfil", "_cliente_supabase", "_coordena_abrigo"):
+            st.session_state.pop(chave, None)
 
 
 def renderizar_login() -> None:

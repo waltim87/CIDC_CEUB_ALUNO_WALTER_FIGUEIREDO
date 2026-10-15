@@ -294,7 +294,7 @@ def mapa_relatos(relatos: list[dict], nomes: dict[str, str], altura: int = 420) 
 def renderizar_relatos() -> None:
     from app.comum import carregar_municipios, exigir_perfil, mostrar_aviso
     from app.relatorio_menu import painel_relatorio
-    from app.visual import grafico_barras
+    from app.visual import carregar_municipios_mapa, grafico_barras
 
     st.title("Relatos de campo (colaborativo)")
     st.caption("Como no Waze: quem está no local informa; outras pessoas confirmam ou negam.")
@@ -309,7 +309,7 @@ def renderizar_relatos() -> None:
         nomes = {c: m["nome"] for c, m in municipios.items()}
         coordenadas = {
             str(m["id_ibge"]).strip(): (m.get("latitude"), m.get("longitude"))
-            for m in cliente.table("municipios").select("id_ibge,latitude,longitude").execute().data or []
+            for m in carregar_municipios_mapa(cliente)
         }
         relatos = _carregar_relatos(cliente)
     except Exception as erro:

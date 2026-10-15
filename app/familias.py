@@ -54,10 +54,17 @@ def _abrigos_acessiveis(cliente: Any, perfil: dict[str, Any], municipio_id: str 
 
 
 def usuario_coordena_abrigo(cliente: Any, usuario_id: str) -> bool:
+    import time
+
+    guardado = st.session_state.get("_coordena_abrigo")
+    if guardado and guardado[0] == usuario_id and time.time() - guardado[2] < 300:
+        return guardado[1]
     try:
-        return bool(cliente.table("abrigo_responsaveis").select("abrigo_id").eq("usuario_id", usuario_id).limit(1).execute().data)
+        resposta = bool(cliente.table("abrigo_responsaveis").select("abrigo_id").eq("usuario_id", usuario_id).limit(1).execute().data)
     except Exception:
         return False
+    st.session_state["_coordena_abrigo"] = (usuario_id, resposta, time.time())
+    return resposta
 
 
 def validar_membros(membros: list[dict[str, Any]]) -> list[str]:
