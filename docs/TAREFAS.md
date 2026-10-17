@@ -54,7 +54,7 @@ Cada uma deve ter:
 - [x] **B1 — Áreas de risco por comunidade (prevenção).** Tipo (inundação, terras caídas,
   erosão, deslizamento, incêndio), número de casas e pessoas, nível, foto e coordenadas, com
   mapa. Vincular ao relatório municipal.
-- [ ] **B2 — Checklist de abrigo pronto (preparação).** Água, energia, banheiros, cozinha,
+- [x] **B2 — Checklist de abrigo pronto (preparação).** Água, energia, banheiros, cozinha,
   acessibilidade, kits e colchões. Selo "pronto" e data da vistoria. Aviso quando a vistoria tiver
   mais de 90 dias.
 - [ ] **B3 — Aviso no Telegram para responsáveis.** Quando alguém receber uma tarefa do plano ou
