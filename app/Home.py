@@ -40,6 +40,7 @@ from app.ajuda import PERFIS_TELA as PERFIS_AJUDA, renderizar_ajuda
 from app.areas_risco import renderizar_areas_risco
 from app.abrigo_vistoria import renderizar_abrigo_vistoria
 from app.s2id import renderizar_s2id
+from app.calendario_risco import renderizar_calendario_risco
 from app.ocorrencias import PERFIS_TELA as PERFIS_OCORRENCIAS, renderizar_ocorrencias
 from app.plano import PERFIS_EQUIPE, PERFIS_LEITURA, _municipio_da_tela, renderizar_minhas_tarefas, renderizar_plano
 
@@ -114,6 +115,7 @@ else:
     paginas.insert(1, st.Page(lambda: renderizar_abrigo_vistoria(cliente, perfil), title="Abrigo pronto", icon="🏘️"))
     paginas.insert(1, st.Page(lambda: renderizar_s2id(cliente, perfil), title="Ficha S2iD", icon="📄"))
     paginas.insert(1, st.Page(lambda: renderizar_areas_risco(cliente, perfil), title="Áreas de risco", icon="⚠️"))
+    paginas.insert(1, st.Page(lambda: renderizar_calendario_risco(cliente, perfil), title="Calendário de risco", icon="📅"))
     if nome_perfil in PERFIS_OCORRENCIAS:
         paginas.insert(1, st.Page(renderizar_ocorrencias, title="Ocorrências", icon="🚑"))
     if nome_perfil in PERFIS_LEITURA:
