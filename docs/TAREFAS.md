@@ -73,7 +73,7 @@ Cada uma deve ter:
 - [x] **B8 — Logística no estoque novo.** A aba "Pré-posicionamento" usa a tabela antiga
   `recursos`. Passe a usar `ajuda_movimentos` e `ajuda_saldo`, sem perder os dados antigos:
   migre-os como entrada do tipo "ajuste" com observação.
-- [ ] **B9 — Embarcações e equipes (resposta).** Cadastro de barcos (capacidade, piloto,
+- [x] **B9 — Embarcações e equipes (resposta).** Cadastro de barcos (capacidade, piloto,
   combustível) e vínculo com as ocorrências.
 - [ ] **B10 — Obras e intervenções (mitigação).** Status, valor, fonte do recurso e comunidades
   beneficiadas.

@@ -37,6 +37,7 @@ from app.familias import renderizar_familias, usuario_coordena_abrigo
 from app.familias_retorno import renderizar_familias_retorno
 from app.licoes_aprendidas import renderizar_licoes_aprendidas
 from app.migracao_estoque import renderizar_migracao_estoque
+from app.embarcacoes import renderizar_embarcacoes
 from app.permissoes import renderizar_permissoes
 from app.chat import PERFIS_CHAT, renderizar_chat
 from app.ajuda import PERFIS_TELA as PERFIS_AJUDA, renderizar_ajuda
@@ -119,6 +120,7 @@ else:
     paginas.insert(1, st.Page(lambda: renderizar_s2id(cliente, perfil), title="Ficha S2iD", icon="📄"))
     paginas.insert(1, st.Page(lambda: renderizar_familias_retorno(cliente, perfil), title="Retorno famílias", icon="🏠"))
     paginas.insert(1, st.Page(lambda: renderizar_licoes_aprendidas(cliente, perfil), title="Lições aprendidas", icon="📋"))
+    paginas.insert(1, st.Page(lambda: renderizar_embarcacoes(cliente, perfil), title="Embarcações", icon="⛵"))
     paginas.insert(1, st.Page(lambda: renderizar_migracao_estoque(cliente, perfil), title="Migração estoque", icon="🔄"))
     paginas.insert(1, st.Page(lambda: renderizar_areas_risco(cliente, perfil), title="Áreas de risco", icon="⚠️"))
     paginas.insert(1, st.Page(lambda: renderizar_calendario_risco(cliente, perfil), title="Calendário de risco", icon="📅"))
