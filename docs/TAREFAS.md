@@ -60,7 +60,7 @@ Cada uma deve ter:
 - [x] **B3 — Aviso no Telegram para responsáveis.** Quando alguém receber uma tarefa do plano ou
   uma ocorrência, avisar quem tem Telegram vinculado, sempre opt-in. Reaproveite
   `core/telegram_robo.py` e o `telegram.yml`. Nunca use dados de quem não aderiu.
-- [ ] **B4 — Ficha para o S2iD (resposta).** Rascunho em PDF com afetados, desalojados,
+- [x] **B4 — Ficha para o S2iD (resposta).** Rascunho em PDF com afetados, desalojados,
   desabrigados, óbitos informados, danos a casas e instalações e ajuda entregue, montado com os
   dados do app. Deixe claro que é **rascunho** para lançar no S2iD oficial.
 - [ ] **B5 — Calendário anual de risco (prevenção).** Pelos marcadores históricos da ANA, o mês

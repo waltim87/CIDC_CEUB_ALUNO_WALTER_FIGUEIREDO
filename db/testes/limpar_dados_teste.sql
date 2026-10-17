@@ -9,6 +9,8 @@ delete from public.areas_risco_comunidade where descricao like '[TESTE]%';
 delete from public.abrigo_vistorias where observacoes like '[TESTE]%';
 -- Notificações de telegram de teste
 delete from public.notificacoes_telegram where mensagem like '[TESTE]%';
+-- Fichas S2iD de teste
+delete from public.pessoas_afetadas where fonte_afetados like '[TESTE]%';
 delete from public.familias_abrigadas where observacoes like '[TESTE]%';   -- membros e fotos em cascata
 delete from public.abrigos where nome like '[TESTE]%';                      -- designações em cascata
 delete from public.relatos where descricao like '[TESTE]%';                -- votos em cascata
@@ -26,4 +28,5 @@ select (select count(*) from public.abrigos where nome like '[TESTE]%') as abrig
        (select count(*) from public.ajuda_movimentos where observacao like '[TESTE]%') as ajuda_movimentos_teste,
        (select count(*) from public.areas_risco_comunidade where descricao like '[TESTE]%') as areas_risco_teste,
        (select count(*) from public.abrigo_vistorias where observacoes like '[TESTE]%') as abrigo_vistorias_teste,
-       (select count(*) from public.notificacoes_telegram where mensagem like '[TESTE]%') as notificacoes_telegram_teste;
+       (select count(*) from public.notificacoes_telegram where mensagem like '[TESTE]%') as notificacoes_telegram_teste,
+       (select count(*) from public.pessoas_afetadas where fonte_afetados like '[TESTE]%') as pessoas_afetadas_teste;
