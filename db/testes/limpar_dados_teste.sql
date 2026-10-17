@@ -29,4 +29,5 @@ select (select count(*) from public.abrigos where nome like '[TESTE]%') as abrig
        (select count(*) from public.areas_risco_comunidade where descricao like '[TESTE]%') as areas_risco_teste,
        (select count(*) from public.abrigo_vistorias where observacoes like '[TESTE]%') as abrigo_vistorias_teste,
        (select count(*) from public.notificacoes_telegram where mensagem like '[TESTE]%') as notificacoes_telegram_teste,
-       (select count(*) from public.pessoas_afetadas where fonte_afetados like '[TESTE]%') as pessoas_afetadas_teste;
+       (select count(*) from public.pessoas_afetadas where fonte_afetados like '[TESTE]%') as pessoas_afetadas_teste,
+       (select count(*) from public.familias_abrigadas where observacoes_retorno like '[TESTE]%') as familias_retorno_teste;

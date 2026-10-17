@@ -66,7 +66,7 @@ Cada uma deve ter:
 - [x] **B5 — Calendário anual de risco (prevenção).** Pelos marcadores históricos da ANA, o mês
   típico da cheia e da seca por estação, com aviso "faltam X dias para o período crítico".
   Não presuma: só onde houver série oficial.
-- [ ] **B6 — Retorno das famílias (recuperação).** Quem voltou para casa, quem não tem para onde
+- [x] **B6 — Retorno das famílias (recuperação).** Quem voltou para casa, quem não tem para onde
   ir e o que falta (reforma, documentos, benefícios). Respeite a LGPD das famílias.
 - [ ] **B7 — Lições aprendidas (recuperação).** Relatório automático de um acionamento do plano:
   linha do tempo, alertas, tarefas concluídas e atrasadas, ocorrências e ajuda entregue.
