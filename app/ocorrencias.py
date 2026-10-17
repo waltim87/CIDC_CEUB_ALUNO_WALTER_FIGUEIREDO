@@ -11,6 +11,8 @@ from typing import Any
 
 import streamlit as st
 
+from core.notificacoes_telegram import chat_id_do_usuario, notificar_responsavel_ocorrencia
+
 TIPOS = {
     "resgate": ("🛟 Resgate de pessoas", [200, 30, 30]),
     "cheia_alagamento": ("🌊 Cheia / alagamento", [21, 101, 192]),
@@ -167,7 +169,18 @@ def _cartao(cliente: Any, o: dict[str, Any], perfil: dict[str, Any], eventos: li
             st.markdown(_texto(o["descricao"]))
         botoes = st.columns(3)
         if pode_assumir and botoes[0].button("🙋 Assumir", key=f"assumir-{o['id']}"):
-            _rpc(cliente, "cidc_ocorrencia_atualizar", {"p_ocorrencia": o["id"], "p_assumir": True}, "Você assumiu.")
+            try:
+                _rpc(cliente, "cidc_ocorrencia_atualizar", {"p_ocorrencia": o["id"], "p_assumir": True}, "Você assumiu.")
+                # Avisa por Telegram quem assumiu (se tiver Telegram vinculado, opt-in).
+                chat_id = chat_id_do_usuario(cliente, perfil["id"])
+                if chat_id:
+                    notificar_responsavel_ocorrencia(
+                        cliente, str(o["municipio_id"]), perfil["id"], chat_id,
+                        o["numero"], o["titulo"], "atribuída", str(o["id"]),
+                    )
+                    st.info("Aviso enviado por Telegram.")
+            except Exception as erro:
+                st.error(f"Não foi possível assumir: {erro}")
         if (da_equipe or coordena) and o["status"] in PROXIMO:
             proximo, rotulo = PROXIMO[o["status"]]
             if botoes[1].button(rotulo, key=f"avancar-{o['id']}", type="primary"):
@@ -205,11 +218,23 @@ def _cartao(cliente: Any, o: dict[str, Any], perfil: dict[str, Any], eventos: li
                     if acao == "anotar" and not texto.strip() and not (equipe or responsavel or prioridade):
                         st.error("Escreva uma anotação ou escolha uma mudança.")
                         return
-                    _rpc(cliente, "cidc_ocorrencia_atualizar", {
-                        "p_ocorrencia": o["id"], "p_status": None if acao == "anotar" else acao,
-                        "p_texto": texto.strip() or None, "p_equipe": equipe, "p_responsavel": responsavel,
-                        "p_prioridade": prioridade,
-                    }, "Ocorrência atualizada.")
+                    try:
+                        _rpc(cliente, "cidc_ocorrencia_atualizar", {
+                            "p_ocorrencia": o["id"], "p_status": None if acao == "anotar" else acao,
+                            "p_texto": texto.strip() or None, "p_equipe": equipe, "p_responsavel": responsavel,
+                            "p_prioridade": prioridade,
+                        }, "Ocorrência atualizada.")
+                        # Se um responsável foi designado, avisa por Telegram (se tiver Telegram vinculado, opt-in).
+                        if responsavel:
+                            chat_id = chat_id_do_usuario(cliente, str(responsavel))
+                            if chat_id:
+                                notificar_responsavel_ocorrencia(
+                                    cliente, str(o["municipio_id"]), str(responsavel), chat_id,
+                                    o["numero"], o["titulo"], acao or "atualizada", str(o["id"]),
+                                )
+                                st.info("Aviso enviado por Telegram para o responsável.")
+                    except Exception as erro:
+                        st.error(f"Não foi possível atualizar: {erro}")
 
 
 def _texto(valor: str) -> str:

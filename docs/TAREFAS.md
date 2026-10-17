@@ -57,7 +57,7 @@ Cada uma deve ter:
 - [x] **B2 — Checklist de abrigo pronto (preparação).** Água, energia, banheiros, cozinha,
   acessibilidade, kits e colchões. Selo "pronto" e data da vistoria. Aviso quando a vistoria tiver
   mais de 90 dias.
-- [ ] **B3 — Aviso no Telegram para responsáveis.** Quando alguém receber uma tarefa do plano ou
+- [x] **B3 — Aviso no Telegram para responsáveis.** Quando alguém receber uma tarefa do plano ou
   uma ocorrência, avisar quem tem Telegram vinculado, sempre opt-in. Reaproveite
   `core/telegram_robo.py` e o `telegram.yml`. Nunca use dados de quem não aderiu.
 - [ ] **B4 — Ficha para o S2iD (resposta).** Rascunho em PDF com afetados, desalojados,

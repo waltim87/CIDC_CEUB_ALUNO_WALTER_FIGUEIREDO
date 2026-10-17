@@ -13,6 +13,8 @@ from typing import Any
 
 import streamlit as st
 
+from core.notificacoes_telegram import notificar_responsaveis_por_funcao
+
 EIXOS = {
     "prevencao": "Prevenção", "mitigacao": "Mitigação", "preparacao": "Preparação",
     "resposta": "Resposta", "recuperacao": "Recuperação",
@@ -199,7 +201,13 @@ def bloco_tarefas(
                                 "responsavel_funcao": nova_funcao, "origem": "manual",
                                 "prazo": datetime.combine(prazo, time(18), timezone(timedelta(hours=-4))).isoformat(),
                             }).execute()
-                            st.success("Tarefa criada.")
+                            # Avisa via Telegram os responsáveis da função que têm Telegram vinculado (opt-in).
+                            prazo_texto = prazo.strftime("%d/%m/%Y")
+                            notificar_responsaveis_por_funcao(
+                                cliente, municipio_id, nova_funcao, descricao.strip(),
+                                prazo_texto,
+                            )
+                            st.success("Tarefa criada. Aviso enviado por Telegram para quem tem cadastro ativo.")
                             st.rerun()
                         except Exception as erro:
                             st.error(f"Não foi possível criar: {erro}")
