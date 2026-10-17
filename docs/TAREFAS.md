@@ -28,7 +28,7 @@ Regras e padrões: [AGENTS.md](../AGENTS.md). Contexto: [CONTINUAR_EM_OUTRA_IA.m
   - conferir a view `ajuda_cobertura_familias`.
   - *Pronto quando:* todos os casos derem o resultado esperado. Se algo falhar, corrija com uma
     migration nova.
-- [ ] **A4 — Limpeza dos testes da ajuda.** Inclua em `db/testes/limpar_dados_teste.sql` a
+- [x] **A4 — Limpeza dos testes da ajuda.** Inclua em `db/testes/limpar_dados_teste.sql` a
   remoção dos movimentos `[TESTE]` de `ajuda_movimentos`, pela observação ou pelo destino de
   teste.
 - [ ] **A5 — Rotina de acordar.** Peça ao usuário para rodar Actions → "Manter o painel
