@@ -1,6 +1,7 @@
 # Comando para continuar o CIDC em outra IA
 
-Copie tudo abaixo da linha e cole como primeira mensagem na outra IA (de preferência uma que
+No OpenCode não precisa colar nada: ele lê sozinho o [AGENTS.md](../AGENTS.md) e as tarefas em
+[TAREFAS.md](TAREFAS.md). Para outras IAs, copie tudo abaixo da linha e cole como primeira mensagem na outra IA (de preferência uma que
 consiga ler arquivos e rodar comandos, como Claude Code, Cursor ou Copilot no VS Code, aberta na
 pasta do projeto).
 
