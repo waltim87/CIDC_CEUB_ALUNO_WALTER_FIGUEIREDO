@@ -70,7 +70,7 @@ Cada uma deve ter:
   ir e o que falta (reforma, documentos, benefícios). Respeite a LGPD das famílias.
 - [x] **B7 — Lições aprendidas (recuperação).** Relatório automático de um acionamento do plano:
   linha do tempo, alertas, tarefas concluídas e atrasadas, ocorrências e ajuda entregue.
-- [ ] **B8 — Logística no estoque novo.** A aba "Pré-posicionamento" usa a tabela antiga
+- [x] **B8 — Logística no estoque novo.** A aba "Pré-posicionamento" usa a tabela antiga
   `recursos`. Passe a usar `ajuda_movimentos` e `ajuda_saldo`, sem perder os dados antigos:
   migre-os como entrada do tipo "ajuste" com observação.
 - [ ] **B9 — Embarcações e equipes (resposta).** Cadastro de barcos (capacidade, piloto,
