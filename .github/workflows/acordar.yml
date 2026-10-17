@@ -1,0 +1,37 @@
+name: Manter o painel acordado (Streamlit)
+
+on:
+  schedule:
+    # A cada 4 horas (horário UTC). O GitHub pode atrasar execuções agendadas em alguns minutos.
+    - cron: "23 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acordar
+  cancel-in-progress: true
+
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Instalar navegador automatico
+        run: |
+          pip install "playwright>=1.45,<2"
+          python -m playwright install --with-deps chromium
+      - name: Abrir o painel e acordar se estiver dormindo
+        run: python scripts/acordar_site.py
+      - name: Guardar print se falhar
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: print-acordar
+          path: acordar_falhou.png
+          if-no-files-found: ignore
