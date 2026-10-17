@@ -15,7 +15,7 @@ Regras e padrões: [AGENTS.md](../AGENTS.md). Contexto: [CONTINUAR_EM_OUTRA_IA.m
   - Se não rodou: copie as duas juntas, confira o início do texto e abra o SQL Editor.
   - Lembre-o de **apagar a aba do SQL Editor em que ele colou, por engano, o arquivo de senhas**.
   - *Pronto quando:* a tabela `ajuda_movimentos` responder 200 pelo REST.
-- [ ] **A2 — Teste da correção das ocorrências.**
+- [x] **A2 — Teste da correção das ocorrências.**
   - Pelo REST: abra uma ocorrência `[TESTE]` como `campo.labrea`. Como `saude.labrea`, sem estar
     na equipe, tente mudar a situação.
   - *Pronto quando:* a tentativa da saúde for **recusada**. Antes de 0015, ela passava.
