@@ -75,5 +75,5 @@ Cada uma deve ter:
   migre-os como entrada do tipo "ajuste" com observação.
 - [x] **B9 — Embarcações e equipes (resposta).** Cadastro de barcos (capacidade, piloto,
   combustível) e vínculo com as ocorrências.
-- [ ] **B10 — Obras e intervenções (mitigação).** Status, valor, fonte do recurso e comunidades
+- [x] **B10 — Obras e intervenções (mitigação).** Status, valor, fonte do recurso e comunidades
   beneficiadas.
