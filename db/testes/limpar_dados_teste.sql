@@ -3,6 +3,8 @@
 begin;
 -- Movimentos de ajuda humanitária de teste (estoque, entregas a família/comunidade/abrigo)
 delete from public.ajuda_movimentos where observacao like '[TESTE]%';
+-- Áreas de risco de teste
+delete from public.areas_risco_comunidade where descricao like '[TESTE]%';
 delete from public.familias_abrigadas where observacoes like '[TESTE]%';   -- membros e fotos em cascata
 delete from public.abrigos where nome like '[TESTE]%';                      -- designações em cascata
 delete from public.relatos where descricao like '[TESTE]%';                -- votos em cascata
@@ -17,4 +19,5 @@ select (select count(*) from public.abrigos where nome like '[TESTE]%') as abrig
        (select count(*) from public.familias_abrigadas where observacoes like '[TESTE]%') as familias_teste,
        (select count(*) from public.relatos where descricao like '[TESTE]%') as relatos_teste,
        (select count(*) from public.chat_mensagens where texto like '[TESTE]%') as mensagens_teste,
-       (select count(*) from public.ajuda_movimentos where observacao like '[TESTE]%') as ajuda_movimentos_teste;
+       (select count(*) from public.ajuda_movimentos where observacao like '[TESTE]%') as ajuda_movimentos_teste,
+       (select count(*) from public.areas_risco_comunidade where descricao like '[TESTE]%') as areas_risco_teste;
