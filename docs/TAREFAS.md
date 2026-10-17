@@ -51,7 +51,7 @@ Cada uma deve ter:
 - testes unitários;
 - teste de tela com AppTest.
 
-- [ ] **B1 — Áreas de risco por comunidade (prevenção).** Tipo (inundação, terras caídas,
+- [x] **B1 — Áreas de risco por comunidade (prevenção).** Tipo (inundação, terras caídas,
   erosão, deslizamento, incêndio), número de casas e pessoas, nível, foto e coordenadas, com
   mapa. Vincular ao relatório municipal.
 - [ ] **B2 — Checklist de abrigo pronto (preparação).** Água, energia, banheiros, cozinha,
