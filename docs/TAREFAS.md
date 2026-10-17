@@ -19,7 +19,7 @@ Regras e padrões: [AGENTS.md](../AGENTS.md). Contexto: [CONTINUAR_EM_OUTRA_IA.m
   - Pelo REST: abra uma ocorrência `[TESTE]` como `campo.labrea`. Como `saude.labrea`, sem estar
     na equipe, tente mudar a situação.
   - *Pronto quando:* a tentativa da saúde for **recusada**. Antes de 0015, ela passava.
-- [ ] **A3 — Teste da ajuda humanitária.** Pelo REST, com as contas de teste:
+- [x] **A3 — Teste da ajuda humanitária.** Pelo REST, com as contas de teste:
   - entrada de 50 cestas como `logistica.labrea`, com observação `[TESTE]`;
   - entrega de 1 cesta a uma família `[TESTE]`;
   - repetir sem justificativa: deve dar erro `REPETIDA`;
