@@ -36,6 +36,8 @@ def renderizar_familias_retorno(cliente: Any, perfil: dict[str, Any]) -> None:
     st.caption("Acompanha quem voltou para casa, quem não tem para onde ir e o que falta "
                "(reforma, documentos, benefícios). Dados respeitam a LGPD.")
     mostrar_aviso()
+    if st.session_state.get("_aviso_retorno"):
+        st.success(st.session_state.pop("_aviso_retorno"))
 
     try:
         municipio_id = _municipio_da_tela(cliente, perfil, "familias_retorno")
@@ -48,7 +50,11 @@ def renderizar_familias_retorno(cliente: Any, perfil: dict[str, Any]) -> None:
         st.error(f"Não foi possível carregar os municípios: {erro}")
         return
 
-    pode_editar = perfil["perfil"] in {"coordenador_municipal", "administrador", "saude_assistencia"}
+    from app.familias import usuario_coordena_abrigo
+
+    # Mesmo critério do banco: coordenação, saúde/assistência, administração e o coordenador do
+    # abrigo (que só vê as famílias do seu abrigo).
+    pode_editar = perfil["perfil"] in {"coordenador_municipal", "administrador", "saude_assistencia"} or         usuario_coordena_abrigo(cliente, perfil["id"])
 
     try:
         abrigos = (cliente.table("abrigos")
@@ -72,7 +78,8 @@ def renderizar_familias_retorno(cliente: Any, perfil: dict[str, Any]) -> None:
         return
 
     # ---------- KPIs ----------
-    ainda_abrigadas = [f for f in familias if f.get("data_saida") is None]
+    # Quem já voltou para casa não conta como abrigada (mesmo em registro antigo sem data de saída).
+    ainda_abrigadas = [f for f in familias if f.get("data_saida") is None and f.get("data_retorno") is None]
     retornaram = [f for f in familias if f.get("data_retorno") is not None]
     sem_para_onde = [f for f in familias if f.get("tem_para_onde_ir") is False]
     precisa_reforma = [f for f in familias if f.get("precisa_reforma")]
@@ -84,7 +91,8 @@ def renderizar_familias_retorno(cliente: Any, perfil: dict[str, Any]) -> None:
     c2.metric("Retornaram para casa", len(retornaram))
     c3.metric("Sem para onde ir", len(sem_para_onde))
     c4.metric("Precisa de reforma", len(precisa_reforma))
-    c5.metric("Precisa de documentos/benefícios", len(precisa_documentos) + len(precisa_beneficios))
+    # Família que precisa dos dois conta uma vez só.
+    c5.metric("Precisa de documentos/benefícios", len({f["id"] for f in precisa_documentos + precisa_beneficios}))
 
     # ---------- Cadastro / atualização de retorno ----------
     st.subheader("Atualizar retorno de família")
@@ -95,25 +103,41 @@ def renderizar_familias_retorno(cliente: Any, perfil: dict[str, Any]) -> None:
         familia_id = st.selectbox("Família", list(familia_opcoes),
                                   format_func=lambda i: familia_opcoes[i],
                                   key="retorno-familia")
-        existente = next((f for f in familias if f["id"] == familia_id), None)
+        existente = next((f for f in familias if f["id"] == familia_id), None) or {}
+        # Campos vêm com o que já foi registrado e o nome interno muda com a família escolhida:
+        # antes vinham em branco e salvar apagava as marcações anteriores.
+        sufixo = familia_id
+        anterior_retorno = existente.get("data_retorno")
 
         c1, c2 = st.columns(2)
-        data_retorno = c1.date_input("Data de retorno (se já voltou)", value=None,
-                                     format="DD/MM/YYYY", key="retorno-data")
+        data_retorno = c1.date_input("Data de retorno (se já voltou)",
+                                     value=date.fromisoformat(str(anterior_retorno)[:10]) if anterior_retorno else None,
+                                     format="DD/MM/YYYY", key=f"retorno-data-{sufixo}")
         endereco_retorno = c2.text_input("Endereço atual (se voltou para casa)", max_chars=300,
-                                         key="retorno-endereco")
+                                         value=existente.get("endereco_retorno") or "",
+                                         key=f"retorno-endereco-{sufixo}")
 
+        opcoes_destino = ["—", "Sim", "Não"]
+        destino_atual = {True: "Sim", False: "Não"}.get(existente.get("tem_para_onde_ir"), "—")
         c1, c2, c3 = st.columns(3)
-        tem_para_onde = c1.selectbox("Tem para onde ir?", ["—", "Sim", "Não"],
-                                     key="retorno-tem-para-onde")
-        precisa_reforma_c = c2.checkbox("Precisa de reforma", key="retorno-reforma")
-        precisa_documentos_c = c3.checkbox("Precisa de documentos", key="retorno-documentos")
+        tem_para_onde = c1.selectbox("Tem para onde ir?", opcoes_destino, index=opcoes_destino.index(destino_atual),
+                                     key=f"retorno-tem-para-onde-{sufixo}")
+        precisa_reforma_c = c2.checkbox("Precisa de reforma", value=bool(existente.get("precisa_reforma")),
+                                        key=f"retorno-reforma-{sufixo}")
+        precisa_documentos_c = c3.checkbox("Precisa de documentos", value=bool(existente.get("precisa_documentos")),
+                                           key=f"retorno-documentos-{sufixo}")
 
         c1, c2 = st.columns(2)
-        precisa_beneficios_c = c1.checkbox("Precisa de benefícios", key="retorno-beneficios")
+        precisa_beneficios_c = c1.checkbox("Precisa de benefícios", value=bool(existente.get("precisa_beneficios")),
+                                           key=f"retorno-beneficios-{sufixo}")
         motivo_sem_retorno = c2.text_input("Motivo sem retorno (se não tem para onde ir)",
-                                           max_chars=500, key="retorno-motivo")
-        observacoes_retorno = st.text_area("Observações", max_chars=1000, key="retorno-obs")
+                                           max_chars=500, value=existente.get("motivo_sem_retorno") or "",
+                                           key=f"retorno-motivo-{sufixo}")
+        observacoes_retorno = st.text_area("Observações", max_chars=1000,
+                                           value=existente.get("observacoes_retorno") or "",
+                                           key=f"retorno-obs-{sufixo}")
+        if data_retorno:
+            st.caption("Ao salvar com data de retorno, a família sai da contagem de abrigadas.")
 
         if st.button("Salvar retorno", type="primary", key="retorno-salvar"):
             try:
@@ -129,10 +153,11 @@ def renderizar_familias_retorno(cliente: Any, perfil: dict[str, Any]) -> None:
                     "p_precisa_beneficios": precisa_beneficios_c,
                     "p_observacoes_retorno": observacoes_retorno.strip() or None,
                 }).execute()
-                st.success("Retorno da família atualizado com sucesso.")
-                st.rerun()
             except Exception as erro:
-                st.error(f"Não foi possível salvar: {erro}")
+                st.error(f"Não foi possível salvar: {getattr(erro, 'message', None) or erro}")
+            else:
+                st.session_state["_aviso_retorno"] = "Retorno da família atualizado."
+                st.rerun()
     elif not pode_editar:
         st.info("Atualização de retorno está disponível para coordenação, administração e saúde/assistência.")
     elif not familias:

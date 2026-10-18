@@ -9,10 +9,10 @@ alter table public.familias_abrigadas
     add column if not exists tem_para_onde_ir boolean,
     add column if not exists motivo_sem_retorno text check (motivo_sem_retorno is null or length(motivo_sem_retorno) <= 500),
     add column if not exists precisa_reforma boolean not null default false,
-    add_column if not exists precisa_documentos boolean not null default false,
-    add_column if not exists precisa_beneficios boolean not null default false,
-    add_column if not exists observacoes_retorno text check (observacoes_retorno is null or length(observacoes_retorno) <= 1000),
-    add_column if not exists retorno_atualizado_em timestamptz;
+    add column if not exists precisa_documentos boolean not null default false,
+    add column if not exists precisa_beneficios boolean not null default false,
+    add column if not exists observacoes_retorno text check (observacoes_retorno is null or length(observacoes_retorno) <= 1000),
+    add column if not exists retorno_atualizado_em timestamptz;
 
 create index if not exists familias_retorno_idx on public.familias_abrigadas (municipio_id, data_retorno);
 
@@ -52,12 +52,12 @@ declare
     v_familia record;
     v_id uuid := p_familia_id;
 begin
-    select f.id, f.municipio_id into v_familia
+    select f.id, f.municipio_id, f.abrigo_id into v_familia
       from public.familias_abrigadas f where f.id = p_familia_id;
     if v_familia.id is null then
         raise exception 'Família não encontrada';
     end if;
-    if not public.cidc_pode_atender_familias(v_familia.municipio_id, v_familia.abrigo_id) then
+    if not coalesce(public.cidc_pode_atender_familias(v_familia.municipio_id, v_familia.abrigo_id), false) then
         raise exception 'Só quem atende famílias deste município pode atualizar o retorno';
     end if;
 
