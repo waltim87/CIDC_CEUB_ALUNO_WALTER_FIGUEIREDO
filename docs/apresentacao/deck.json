@@ -1,0 +1,21 @@
+{
+  "v": 4,
+  "createdOnFiles": {"v": 1, "at": "2026-10-17T23:30:00Z"},
+  "lists": "css",
+  "title": "CIDC — Arquitetura e Operação",
+  "cover": "cover",
+  "order": ["cover", "desafio", "objetivo", "visao", "camadas", "escolhas", "seguranca", "fontes", "criterios", "robo", "ia", "pessoais", "eixos", "ciclo", "perfis", "testes", "brechas", "limites", "m-acesso", "m-rotina", "m-alerta", "m-evento", "m-manutencao", "fim"],
+  "sections": {
+    "s1": {"description": "O problema que o CIDC resolve e o que ele faz", "start": "cover"},
+    "s2": {"description": "Arquitetura: como as peças se ligam e por que foram escolhidas", "start": "visao"},
+    "s3": {"description": "Dados: fontes oficiais, critérios de escolha e como o robô decide", "start": "fontes"},
+    "s4": {"description": "Funcionalidades nos 5 eixos da Defesa Civil", "start": "eixos"},
+    "s5": {"description": "Qualidade: testes, brechas corrigidas e limites", "start": "testes"},
+    "s6": {"description": "Manual de operação resumido", "start": "m-acesso"}
+  },
+  "faces": {
+    "libre-baskerville": {"family": "Libre Baskerville", "href": "https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap"},
+    "public-sans": {"family": "Public Sans", "href": "https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap"}
+  },
+  "designSystems": []
+}

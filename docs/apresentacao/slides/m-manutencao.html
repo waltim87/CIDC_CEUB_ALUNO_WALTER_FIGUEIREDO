@@ -1,0 +1,20 @@
+<section id="m-manutencao" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'Public Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#A65A17">Manual de operação · 5</p>
+<h2 style="font-family:'Libre Baskerville', Georgia, serif;font-size:60px;font-weight:700;line-height:1.15;color:#14213D">Manutenção (administração)</h2>
+</div>
+<table style="font-size:24px;color:#14213D;font-family:'Public Sans', Arial, sans-serif">
+<tr style="background:#E9EEF4"><th style="width:34%">Situação</th><th style="width:66%">O que fazer</th></tr>
+<tr><td>Atualizou o código</td><td>Streamlit → Manage app → Reboot app</td></tr>
+<tr style="background:#FFFDF8"><td>Mudança no banco</td><td>Revisar o SQL, colar no SQL Editor do Supabase e rodar</td></tr>
+<tr><td>Fonte com erro</td><td>Sala de monitoramento; no GitHub, ver a execução de “coleta”</td></tr>
+<tr style="background:#FFFDF8"><td>Site não acorda</td><td>GitHub → “Manter o painel acordado” → Run workflow</td></tr>
+<tr><td>Conferir permissões</td><td>Rodar scripts/teste_integrado.py</td></tr>
+<tr style="background:#FFFDF8"><td>Novo integrante</td><td>Usuários e permissões: escolher perfil e município</td></tr>
+</table>
+<div style="display:flex;flex-direction:column;gap:12px;background:#14213D;border-radius:16px;padding:32px 40px">
+<p style="font-size:26px;line-height:1.45;color:#F6F4EE"><b style="color:#E8A65E">Nunca</b> coloque a chave mestra do banco no site nem envie senhas por chat.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5A6678">CIDC · Arquitetura e operação · 23</p>
+<aside>A manutenção cabe numa tabela. As duas tarefas mais comuns: reiniciar o app depois de uma atualização e aplicar mudanças no banco pelo SQL Editor, sempre revisando o SQL antes. Para conferir que nenhuma permissão quebrou, há o script de teste integrado.</aside>
+</section>
