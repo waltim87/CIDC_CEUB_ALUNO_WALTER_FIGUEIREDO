@@ -10,7 +10,7 @@ A leitura segue o município do usuário (RLS no banco).
 
 from __future__ import annotations
 
-from datetime import timedelta, timezone
+from datetime import date, timedelta, timezone
 from typing import Any
 
 import streamlit as st
@@ -132,7 +132,7 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
         )
         existente = next((o for o in obras if o["id"] == obra_id), None) if obra_id else None
 
-        with st.form("form_obra", clear_on_submit=False):
+        with st.form(f"form_obra-{obra_id}", clear_on_submit=False):
             c1, c2 = st.columns(2)
             nome = c1.text_input("Nome da obra *", max_chars=200,
                                  value=existente.get("nome") if existente else "",
@@ -164,18 +164,24 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
                 "Comunidades beneficiadas",
                 options=sorted(set(nomes_comunidades) | set(ja_marcadas)),
                 default=ja_marcadas,
-                key="obra-comunidades",
+                key=f"obra-comunidades-{obra_id}",
             )
             pessoas_retiradas_input = st.number_input(
                 "Pessoas retiradas da área de risco", min_value=0, step=1,
                 value=int(existente.get("pessoas_retiradas_risco") or 0) if existente else 0)
+            # Na edição, as datas e a descrição vêm preenchidas: o salvamento regrava todos os
+            # campos, e antes a edição apagava as datas já cadastradas.
+            def _data(campo: str):
+                valor = (existente or {}).get(campo)
+                return date.fromisoformat(str(valor)[:10]) if valor else None
+
             c1, c2, c3 = st.columns(3)
-            data_inicio = c1.date_input("Data de início", value=None,
-                                        format="DD/MM/YYYY", key="obra-data-inicio")
-            data_previsao = c2.date_input("Previsão de término", value=None,
-                                          format="DD/MM/YYYY", key="obra-data-previsao")
-            data_termino = c3.date_input("Data de término", value=None,
-                                         format="DD/MM/YYYY", key="obra-data-termino")
+            data_inicio = c1.date_input("Data de início", value=_data("data_inicio"),
+                                        format="DD/MM/YYYY", key=f"obra-data-inicio-{obra_id}")
+            data_previsao = c2.date_input("Previsão de término", value=_data("data_previsao_termino"),
+                                          format="DD/MM/YYYY", key=f"obra-data-previsao-{obra_id}")
+            data_termino = c3.date_input("Data de término", value=_data("data_termino"),
+                                         format="DD/MM/YYYY", key=f"obra-data-termino-{obra_id}")
             observacoes = st.text_area("Observações", max_chars=1000,
                                        value=existente.get("observacoes") if existente else "")
             if st.form_submit_button("Salvar obra", type="primary"):
@@ -187,7 +193,7 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
                             "p_id": obra_id,
                             "p_municipio_id": municipio_id,
                             "p_nome": nome.strip(),
-                            "p_descricao": None,
+                            "p_descricao": (existente or {}).get("descricao"),
                             "p_tipo": tipo,
                             "p_status": status,
                             "p_valor": valor or None,
