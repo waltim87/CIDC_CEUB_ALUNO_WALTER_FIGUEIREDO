@@ -160,6 +160,10 @@ def main() -> int:
 
     # ------------------------------------------------ 5. vistoria de abrigo
     abrigos = ler("coordenacao.labrea", f"abrigos?select=id,nome&municipio_id=eq.{LABREA}&nome=like.%5BTESTE%5D*&order=nome")
+    # Primeiro o abrigo que o agente de campo coordena (designado em db/testes/usuarios_teste.sql).
+    do_campo = {r["abrigo_id"] for r in ler("coordenacao.labrea", "abrigo_responsaveis?select=abrigo_id,usuario_id")
+                if r["usuario_id"] == usuario_id("campo.labrea")}
+    abrigos.sort(key=lambda a: a["id"] not in do_campo)
     if abrigos:
         ok, msg = rpc("campo.labrea", "cidc_abrigo_vistoria_registrar", p_abrigo_id=abrigos[0]["id"], p_agua=True,
                       p_energia=True, p_banheiros=True, p_cozinha=True, p_acessibilidade=True, p_kits=True,
@@ -208,8 +212,12 @@ def main() -> int:
            requests.get(f"{U}/rest/v1/assinaturas_alerta?select=id&municipio_id=eq.{LABREA}&limit=1",
                         headers=h("logistica.labrea")).status_code == 200)
     checar("voluntária não lê mensagens do Telegram de outros", not ler("voluntario1", "notificacoes_telegram?select=id"))
-    checar("voluntária não vê famílias abrigadas (CPF/nomes)", not ler("voluntario1", "familias_abrigadas?select=id&limit=5"))
-    checar("voluntária não vê membros das famílias", not ler("voluntario1", "membros_familia?select=id&limit=5"))
+    checar("voluntário sem designação não vê famílias abrigadas (CPF/nomes)",
+           not ler("voluntario2", "familias_abrigadas?select=id&limit=5"))
+    checar("voluntário sem designação não vê membros das famílias", not ler("voluntario2", "membros_familia?select=id&limit=5"))
+    # voluntario1 é "apoio" do abrigo Escola Rio Purus: vê só as famílias DAQUELE abrigo.
+    vistas = {f["abrigo_id"] for f in ler("voluntario1", "familias_abrigadas?select=abrigo_id&limit=500")}
+    checar("voluntária de apoio vê só as famílias do próprio abrigo", vistas and vistas <= do_campo, vistas)
     checar("coordenador do abrigo vê famílias do abrigo", bool(ler("campo.labrea", "familias_abrigadas?select=id&limit=5")))
     checar("pesquisador não lê o chat", not ler("pesquisa", "chat_mensagens?select=id&limit=5"))
     checar("coordenação de outro município não vê famílias de Lábrea",

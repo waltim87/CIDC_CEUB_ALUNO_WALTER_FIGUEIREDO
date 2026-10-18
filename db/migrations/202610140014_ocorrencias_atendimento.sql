@@ -106,6 +106,8 @@ as $$
 declare
     v_id uuid;
     v_relato record;
+    v_lat double precision;
+    v_lon double precision;
 begin
     if not public.cidc_pode_abrir_ocorrencia(p_municipio_id) then
         raise exception 'Só as equipes do município abrem ocorrências (voluntários registram relatos)';
@@ -118,12 +120,14 @@ begin
         if exists (select 1 from public.ocorrencias where relato_id = p_relato_id) then
             raise exception 'Este relato já virou uma ocorrência';
         end if;
+        v_lat := v_relato.latitude;
+        v_lon := v_relato.longitude;
     end if;
     insert into public.ocorrencias (municipio_id, relato_id, tipo, prioridade, titulo, descricao, local_descricao,
                                     latitude, longitude, pessoas_envolvidas, aberta_por)
     values (p_municipio_id, p_relato_id, p_tipo, coalesce(p_prioridade, 'media'), trim(p_titulo),
             nullif(trim(coalesce(p_descricao, '')), ''), nullif(trim(coalesce(p_local, '')), ''),
-            coalesce(p_latitude, v_relato.latitude), coalesce(p_longitude, v_relato.longitude),
+            coalesce(p_latitude, v_lat), coalesce(p_longitude, v_lon),
             p_pessoas, public.cidc_usuario_id_atual())
     returning id into v_id;
     perform public.cidc_ocorrencia_evento(v_id, 'aberta',
