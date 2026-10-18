@@ -56,13 +56,16 @@ create policy areas_risco_gestao on public.areas_risco_comunidade
 grant insert, update, delete on public.areas_risco_comunidade to authenticated;
 
 -- Função para cadastrar/atualizar uma área de risco (usa registro_por automático).
+-- Obrigatórios primeiro (Postgres não aceita parâmetro sem default depois de um com default);
+-- o app chama pelo nome dos parâmetros.
+drop function if exists public.cidc_area_risco_cadastrar(uuid, char, uuid, text, text, text, integer, integer, text, double precision, double precision, text);
 create or replace function public.cidc_area_risco_cadastrar(
-    p_id uuid default null,
     p_municipio_id char(7),
-    p_comunidade_id uuid default null,
     p_nome text,
     p_tipo text,
     p_nivel text,
+    p_id uuid default null,
+    p_comunidade_id uuid default null,
     p_casas integer default null,
     p_pessoas integer default null,
     p_descricao text default null,
@@ -77,6 +80,7 @@ set search_path = pg_catalog, public, pg_temp
 as $$
 declare
     v_id uuid := coalesce(p_id, gen_random_uuid());
+    v_salvo uuid;
 begin
     if not public.cidc_pode_gerenciar_area_risco(p_municipio_id) then
         raise exception 'Só a coordenação municipal ou a administração gerencia áreas de risco';
@@ -105,10 +109,16 @@ begin
         latitude = excluded.latitude,
         longitude = excluded.longitude,
         caminho_foto = excluded.caminho_foto,
-        atualizado_em = now();
-    return v_id;
+        atualizado_em = now()
+    -- Só atualiza área do MESMO município (sem isso, dava para sobrescrever a de outro pelo id).
+    where public.areas_risco_comunidade.municipio_id = excluded.municipio_id
+    returning id into v_salvo;
+    if v_salvo is null then
+        raise exception 'Área de risco não encontrada neste município';
+    end if;
+    return v_salvo;
 end;
 $$;
-revoke all on function public.cidc_area_risco_cadastrar(uuid, char, uuid, text, text, text, integer, integer, text, double precision, double precision, text) from public;
-revoke all on function public.cidc_area_risco_cadastrar(uuid, char, uuid, text, text, text, integer, integer, text, double precision, double precision, text) from authenticated, anon;
-grant execute on function public.cidc_area_risco_cadastrar(uuid, char, uuid, text, text, text, integer, integer, text, double precision, double precision, text) to authenticated;
+revoke all on function public.cidc_area_risco_cadastrar(char, text, text, text, uuid, uuid, integer, integer, text, double precision, double precision, text) from public;
+revoke all on function public.cidc_area_risco_cadastrar(char, text, text, text, uuid, uuid, integer, integer, text, double precision, double precision, text) from anon;
+grant execute on function public.cidc_area_risco_cadastrar(char, text, text, text, uuid, uuid, integer, integer, text, double precision, double precision, text) to authenticated;

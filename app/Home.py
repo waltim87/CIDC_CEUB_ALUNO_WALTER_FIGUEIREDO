@@ -117,15 +117,29 @@ else:
         paginas.insert(1, st.Page(renderizar_minhas_tarefas, title="Minhas tarefas", icon="✅"))
     if nome_perfil in PERFIS_AJUDA or usuario_coordena_abrigo(cliente, perfil["id"]):
         paginas.insert(1, st.Page(renderizar_ajuda, title="Ajuda humanitária", icon="📦"))
-    paginas.insert(1, st.Page(lambda: renderizar_abrigo_vistoria(cliente, perfil), title="Abrigo pronto", icon="🏘️"))
-    paginas.insert(1, st.Page(lambda: renderizar_s2id(cliente, perfil), title="Ficha S2iD", icon="📄"))
-    paginas.insert(1, st.Page(lambda: renderizar_familias_retorno(cliente, perfil), title="Retorno famílias", icon="🏠"))
-    paginas.insert(1, st.Page(lambda: renderizar_licoes_aprendidas(cliente, perfil), title="Lições aprendidas", icon="📋"))
-    paginas.insert(1, st.Page(lambda: renderizar_embarcacoes(cliente, perfil), title="Embarcações", icon="⛵"))
-    paginas.insert(1, st.Page(lambda: renderizar_obras_intervencoes(cliente, perfil), title="Obras e intervenções", icon="🏗️"))
-    paginas.insert(1, st.Page(lambda: renderizar_migracao_estoque(cliente, perfil), title="Migração estoque", icon="🔄"))
-    paginas.insert(1, st.Page(lambda: renderizar_areas_risco(cliente, perfil), title="Áreas de risco", icon="⚠️"))
-    paginas.insert(1, st.Page(lambda: renderizar_calendario_risco(cliente, perfil), title="Calendário de risco", icon="📅"))
+    # Páginas que recebem (cliente, perfil). Cada uma precisa de url_path próprio: sem isso todas
+    # viram "<lambda>" e o Streamlit recusa o menu inteiro (o site quebrava depois do login).
+    def _pagina(funcao, titulo: str, icone: str, caminho: str):
+        return st.Page(lambda: funcao(cliente, perfil), title=titulo, icon=icone, url_path=caminho)
+
+    equipe_municipal = nome_perfil != "pesquisador"
+    ve_familias = nome_perfil in {"administrador", "coordenador_municipal", "saude_assistencia"} or usuario_coordena_abrigo(
+        cliente, perfil["id"])
+    novas = [
+        (True, renderizar_calendario_risco, "Calendário de risco", "📅", "calendario-risco"),
+        (True, renderizar_areas_risco, "Áreas de risco", "⚠️", "areas-risco"),
+        (nome_perfil == "administrador", renderizar_migracao_estoque, "Migração estoque", "🔄", "migracao-estoque"),
+        (True, renderizar_obras_intervencoes, "Obras e intervenções", "🏗️", "obras"),
+        (equipe_municipal, renderizar_embarcacoes, "Embarcações", "⛵", "embarcacoes"),
+        (nome_perfil in PERFIS_LEITURA, renderizar_licoes_aprendidas, "Lições aprendidas", "📋", "licoes-aprendidas"),
+        (ve_familias, renderizar_familias_retorno, "Retorno famílias", "🏠", "retorno-familias"),
+        (nome_perfil in {"administrador", "coordenador_municipal", "agente_campo", "gestor_estadual", "gestor_nacional"},
+         renderizar_s2id, "Ficha S2iD", "📄", "ficha-s2id"),
+        (equipe_municipal, renderizar_abrigo_vistoria, "Abrigo pronto", "🏘️", "abrigo-pronto"),
+    ]
+    for liberada, funcao, titulo, icone, caminho in novas:
+        if liberada:
+            paginas.insert(1, _pagina(funcao, titulo, icone, caminho))
     if nome_perfil in PERFIS_OCORRENCIAS:
         paginas.insert(1, st.Page(renderizar_ocorrencias, title="Ocorrências", icon="🚑"))
     if nome_perfil in PERFIS_LEITURA:

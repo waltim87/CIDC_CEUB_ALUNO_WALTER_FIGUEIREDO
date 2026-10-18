@@ -59,12 +59,18 @@ create policy obras_intervencoes_gestao on public.obras_intervencoes
 grant insert, update, delete on public.obras_intervencoes to authenticated;
 
 -- Função para cadastrar/atualizar obra.
+-- Obrigatórios primeiro (Postgres não aceita parâmetro sem default depois de um com default).
+-- O app chama pelo NOME dos parâmetros, então a ordem não importa para ele.
+-- Remove as versões que podem ter ficado de tentativas anteriores.
+drop function if exists public.cidc_obra_cadastrar(char, text, text, text, text, numeric, text, text[], integer, date, date, date, text, text);
+drop function if exists public.cidc_obra_cadastrar(uuid, char, text, text, text, text, numeric, text, text[], integer, date, date, date, text, text);
+
 create or replace function public.cidc_obra_cadastrar(
-    p_id uuid default null,
     p_municipio_id char(7),
     p_nome text,
-    p_descricao text default null,
     p_tipo text,
+    p_id uuid default null,
+    p_descricao text default null,
     p_status text default 'planejada',
     p_valor numeric default null,
     p_fonte_recurso text default null,
@@ -83,6 +89,7 @@ set search_path = pg_catalog, public, pg_temp
 as $$
 declare
     v_id uuid := coalesce(p_id, gen_random_uuid());
+    v_salvo uuid;
 begin
     if not public.cidc_pode_gerenciar_obra(p_municipio_id) then
         raise exception 'Só coordenação ou administração gerencia obras';
@@ -93,8 +100,8 @@ begin
          data_previsao_termino, data_termino, responsavel, observacoes,
          registrado_por, registrado_em, atualizado_em)
     values (v_id, p_municipio_id, trim(p_nome), nullif(trim(coalesce(p_descricao, '')), ''),
-            p_tipo, p_status, p_valor, nullif(trim(coalesce(p_fonte_recurso, '')), ''),
-            p_comunidades_beneficiadas, p_pessoas_retiradas_risco, p_data_inicio,
+            p_tipo, coalesce(p_status, 'planejada'), p_valor, nullif(trim(coalesce(p_fonte_recurso, '')), ''),
+            coalesce(p_comunidades_beneficiadas, '{}'), p_pessoas_retiradas_risco, p_data_inicio,
             p_data_previsao_termino, p_data_termino,
             nullif(trim(coalesce(p_responsavel, '')), ''),
             nullif(trim(coalesce(p_observacoes, '')), ''),
@@ -113,10 +120,17 @@ begin
         data_termino = excluded.data_termino,
         responsavel = excluded.responsavel,
         observacoes = excluded.observacoes,
-        atualizado_em = now();
-    return v_id;
+        atualizado_em = now()
+    -- Só atualiza obra do MESMO município que a pessoa pode gerenciar
+    -- (sem isso, dava para sobrescrever a obra de outro município pelo id).
+    where public.obras_intervencoes.municipio_id = excluded.municipio_id
+    returning id into v_salvo;
+    if v_salvo is null then
+        raise exception 'Obra não encontrada neste município';
+    end if;
+    return v_salvo;
 end;
 $$;
-revoke all on function public.cidc_obra_cadastrar(uuid, char, text, text, text, text, numeric, text, text[], integer, date, date, date, text, text) from public;
-revoke all on function public.cidc_obra_cadastrar(uuid, char, text, text, text, text, numeric, text, text[], integer, date, date, date, text, text) from authenticated, anon;
-grant execute on function public.cidc_obra_cadastrar(uuid, char, text, text, text, text, numeric, text, text[], integer, date, date, date, text, text) to authenticated;
+revoke all on function public.cidc_obra_cadastrar(char, text, text, uuid, text, text, numeric, text, text[], integer, date, date, date, text, text) from public;
+revoke all on function public.cidc_obra_cadastrar(char, text, text, uuid, text, text, numeric, text, text[], integer, date, date, date, text, text) from anon;
+grant execute on function public.cidc_obra_cadastrar(char, text, text, uuid, text, text, numeric, text, text[], integer, date, date, date, text, text) to authenticated;

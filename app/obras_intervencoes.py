@@ -139,11 +139,11 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
                                  placeholder="Ex.: Contenção da margem do rio São Raimundo")
             tipo = c2.selectbox("Tipo", list(TIPOS),
                                 index=list(TIPOS).index(existente.get("tipo")) if existente and existente.get("tipo") in TIPOS else 0,
-                                format_func=lambda t: TIPOS[t][0])
+                                format_func=lambda t: TIPOS[t])
             c1, c2 = st.columns(2)
             status = c1.selectbox("Status", list(STATUS),
                                   index=list(STATUS).index(existente.get("status")) if existente and existente.get("status") in STATUS else 0,
-                                  format_func=lambda s: STATUS[s][0])
+                                  format_func=lambda s: STATUS[s])
             valor = c2.number_input("Valor (R$)", min_value=0.0, step=100.0,
                                     value=float(existente.get("valor")) if existente and existente.get("valor") else 0.0)
             c1, c2 = st.columns(2)
@@ -152,23 +152,20 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
                                           placeholder="Ex.: Defesa Civil Estadual, Governo Federal")
             responsavel = c2.text_input("Responsável", max_chars=200,
                                         value=existente.get("responsavel") if existente else "")
+            # Comunidades do município carregadas ANTES da lista (antes, a lista ficava vazia e o
+            # app tentava alterar o widget depois de criado, o que quebra a tela).
+            try:
+                nomes_comunidades = [c["nome"] for c in (cliente.table("comunidades").select("nome")
+                                     .eq("municipio_id", municipio_id).order("nome").execute().data or [])]
+            except Exception:
+                nomes_comunidades = []
+            ja_marcadas = list((existente or {}).get("comunidades_beneficiadas") or [])
             comunidades = st.multiselect(
                 "Comunidades beneficiadas",
-                options=[],  # será preenchido abaixo
-                default=existente.get("comunidades_beneficiadas") or [] if existente else [],
+                options=sorted(set(nomes_comunidades) | set(ja_marcadas)),
+                default=ja_marcadas,
                 key="obra-comunidades",
             )
-            # Carrega comunidades do município para o multiselect
-            try:
-                coms = (cliente.table("comunidades")
-                        .select("id,nome")
-                        .eq("municipio_id", municipio_id)
-                        .order("nome")
-                        .execute().data or [])
-                st.session_state["obra-comunidades"] = [c["nome"] for c in coms]
-                com_map = {c["nome"]: c["id"] for c in coms}
-            except Exception:
-                com_map = {}
             pessoas_retiradas_input = st.number_input(
                 "Pessoas retiradas da área de risco", min_value=0, step=1,
                 value=int(existente.get("pessoas_retiradas_risco") or 0) if existente else 0)
@@ -219,8 +216,8 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
         for o in obras:
             linhas_tabela.append({
                 "Obra": o["nome"],
-                "Tipo": TIPOS[o["tipo"]][0],
-                "Status": STATUS[o["status"]][0],
+                "Tipo": TIPOS.get(o["tipo"], o["tipo"]),
+                "Status": STATUS.get(o["status"], o["status"]),
                 "Valor": _moeda(o.get("valor")),
                 "Fonte": o.get("fonte_recurso") or "—",
                 "Comunidades": ", ".join(o.get("comunidades_beneficiadas") or []),
@@ -236,8 +233,8 @@ def renderizar_obras_intervencoes(cliente: Any, perfil: dict[str, Any]) -> None:
     for o in obras:
         linhas_relatorio.append({
             "Obra": o["nome"],
-            "Tipo": TIPOS[o["tipo"]][0],
-            "Status": STATUS[o["status"]][0],
+            "Tipo": TIPOS.get(o["tipo"], o["tipo"]),
+            "Status": STATUS.get(o["status"], o["status"]),
             "Valor": o.get("valor") or 0,
             "Fonte do recurso": o.get("fonte_recurso") or "",
             "Comunidades beneficiadas": ", ".join(o.get("comunidades_beneficiadas") or []),
