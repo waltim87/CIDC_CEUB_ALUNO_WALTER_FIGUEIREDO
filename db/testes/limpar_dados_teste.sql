@@ -5,6 +5,7 @@ begin;
 delete from public.ajuda_movimentos where observacao like '[TESTE]%';
 -- Áreas de risco de teste
 delete from public.areas_risco_comunidade where descricao like '[TESTE]%';
+delete from public.obras_intervencoes where nome like '[TESTE]%';
 -- Vistorias de abrigo de teste
 delete from public.abrigo_vistorias where observacoes like '[TESTE]%';
 -- Notificações de telegram de teste
@@ -27,6 +28,7 @@ select (select count(*) from public.abrigos where nome like '[TESTE]%') as abrig
        (select count(*) from public.chat_mensagens where texto like '[TESTE]%') as mensagens_teste,
        (select count(*) from public.ajuda_movimentos where observacao like '[TESTE]%') as ajuda_movimentos_teste,
        (select count(*) from public.areas_risco_comunidade where descricao like '[TESTE]%') as areas_risco_teste,
+       (select count(*) from public.obras_intervencoes where nome like '[TESTE]%') as obras_teste,
        (select count(*) from public.abrigo_vistorias where observacoes like '[TESTE]%') as abrigo_vistorias_teste,
        (select count(*) from public.notificacoes_telegram where mensagem like '[TESTE]%') as notificacoes_telegram_teste,
        (select count(*) from public.pessoas_afetadas where fonte_afetados like '[TESTE]%') as pessoas_afetadas_teste,
