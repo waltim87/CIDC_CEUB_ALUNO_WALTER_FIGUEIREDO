@@ -177,9 +177,12 @@ def main() -> int:
             "abrigo_id": abrigos[0]["id"], "municipio_id": BOCA, "vistoriado_por": usuario_id("coordenacao.boca"),
             "selo_pronto": True, "observacoes": "[TESTE] invasao"})
         checar("BLOQUEIO: vistoria falsa de outro município direto na tabela", st_ >= 400, st_)
-        ok, msg = rpc("voluntario1", "cidc_abrigo_vistoria_registrar", p_abrigo_id=abrigos[2 if len(abrigos) > 2 else 0]["id"],
+        ok, msg = rpc("voluntario2", "cidc_abrigo_vistoria_registrar", p_abrigo_id=abrigos[0]["id"],
                       p_agua=True, p_observacao="[TESTE] invasao")
-        checar("BLOQUEIO: voluntária sem abrigo não vistoria", not ok, msg)
+        checar("BLOQUEIO: voluntário sem designação no abrigo não vistoria", not ok, msg)
+        rpc("campo.labrea", "cidc_abrigo_vistoria_registrar", p_abrigo_id=abrigos[0]["id"], p_agua=True, p_energia=True,
+            p_banheiros=True, p_cozinha=True, p_acessibilidade=True, p_kits=True, p_colchoes=True,
+            p_observacao="[TESTE] revistoria completa")
         recente = ler("voluntario1", f"abrigo_vistoria_recente?select=*&abrigo_id=eq.{abrigos[0]['id']}")
         checar("selo do abrigo aparece na última vistoria", recente and recente[0]["selo_pronto"] is True, recente)
 
