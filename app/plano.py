@@ -80,7 +80,10 @@ def linhas_tarefas(tarefas: list[dict[str, Any]], agora: datetime | None = None)
             "Situação": ("⚠️ ATRASADA" if atrasada(t, agora) else STATUS.get(t["status"], t["status"])),
             "Eixo": EIXOS.get(t["eixo"], t["eixo"]),
             "Tarefa": t["descricao"],
-            "Responsável": FUNCOES.get(t.get("responsavel_funcao"), t.get("responsavel_funcao") or "—"),
+            # Pessoa (titular da área, via "Responsáveis por área") e a equipe da função.
+            "Responsável": " · ".join(x for x in (t.get("responsavel_nome"),
+                                                   FUNCOES.get(t.get("responsavel_funcao"), t.get("responsavel_funcao")))
+                                      if x) or "—",
             "Prazo": _data_br(t.get("prazo")),
             "Origem": "plano" if t.get("origem") == "plano" else "manual",
             "Concluída em": _data_br(t.get("concluida_em")),

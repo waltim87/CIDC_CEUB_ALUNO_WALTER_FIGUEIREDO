@@ -6,6 +6,12 @@ delete from public.ajuda_movimentos where observacao like '[TESTE]%';
 -- Áreas de risco de teste
 delete from public.areas_risco_comunidade where descricao like '[TESTE]%';
 delete from public.obras_intervencoes where nome like '[TESTE]%';
+delete from public.responsaveis_area where observacao like '[TESTE]%';
+delete from public.abrigo_vistorias where observacoes like '[TESTE]%';
+delete from public.pessoas_afetadas where observacoes like '[TESTE]%';
+delete from public.ocorrencias where titulo like '[TESTE]%';                -- linha do tempo em cascata
+update public.ocorrencias set embarcacao_id = null where embarcacao_id in (select id from public.embarcacoes where nome like '[TESTE]%');
+delete from public.embarcacoes where nome like '[TESTE]%';
 -- Vistorias de abrigo de teste
 delete from public.abrigo_vistorias where observacoes like '[TESTE]%';
 -- Notificações de telegram de teste

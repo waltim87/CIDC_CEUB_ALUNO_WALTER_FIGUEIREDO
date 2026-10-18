@@ -1,9 +1,9 @@
 """Avisos por Telegram para responsáveis de tarefas e ocorrências (resposta).
 
 Reaproveita a classe ``Telegram`` de ``core/telegram_robo.py`` para enviar
-mensagens. Sempre opt-in: só envia para quem se inscreveu no Telegram
-(assinaturas_alerta ativas com canal telegram) ou tem telegram_chat_id
-vinculado (voluntários). Nunca usa dados de quem não aderiu.
+mensagens. Sempre opt-in: só envia para quem vinculou o PRÓPRIO Telegram no robô
+(voluntarios.telegram_chat_id). Assinaturas de alertas públicos não pertencem a usuários e
+nunca são usadas aqui.
 
 O token do Telegram vem do secret TELEGRAM_BOT_TOKEN (Streamlit Cloud secrets
 ou variável de ambiente local).
@@ -34,9 +34,8 @@ def obter_token_telegram() -> str | None:
 def chat_id_do_usuario(cliente: Any, usuario_id: str) -> str | None:
     """Busca o chat_id do Telegram de um usuário.
 
-    Procura primeiro em voluntarios.telegram_chat_id (vínculo direto),
-    depois em assinaturas_alerta com canal telegram e ativo=true.
-    Retorna o primeiro encontrado (opt-in).
+    Só o vínculo do próprio usuário (voluntarios.telegram_chat_id, feito por ele no robô).
+    Sem vínculo, não envia (opt-in).
     """
     try:
         # 1. Vínculo direto via cadastro de voluntário.
@@ -52,19 +51,9 @@ def chat_id_do_usuario(cliente: Any, usuario_id: str) -> str | None:
         if v:
             return v[0].get("telegram_chat_id")
 
-        # 2. Inscrição ativa no Telegram para qualquer município.
-        s = (
-            cliente.table("assinaturas_alerta")
-            .select("destino")
-            .eq("canal", "telegram")
-            .eq("ativo", True)
-            .not_.is_("confirmado_em", "null")
-            .limit(1)
-            .execute()
-            .data
-        )
-        if s:
-            return s[0].get("destino")
+        # NÃO usar assinaturas_alerta: elas são da população (opt-in de alertas públicos) e não
+        # pertencem a nenhum usuário. A versão anterior pegava a PRIMEIRA assinatura ativa de
+        # qualquer pessoa e mandava avisos internos para um morador aleatório.
     except Exception:
         return None
     return None

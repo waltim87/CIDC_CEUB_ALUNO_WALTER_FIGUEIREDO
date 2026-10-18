@@ -41,6 +41,7 @@ from app.embarcacoes import renderizar_embarcacoes
 from app.obras_intervencoes import renderizar_obras_intervencoes
 from app.permissoes import renderizar_permissoes
 from app.chat import PERFIS_CHAT, renderizar_chat
+from app.responsaveis import PERFIS_TELA as PERFIS_RESPONSAVEIS, renderizar_responsaveis
 from app.ajuda import PERFIS_TELA as PERFIS_AJUDA, renderizar_ajuda
 from app.areas_risco import renderizar_areas_risco
 from app.abrigo_vistoria import renderizar_abrigo_vistoria
@@ -140,6 +141,8 @@ else:
     for liberada, funcao, titulo, icone, caminho in novas:
         if liberada:
             paginas.insert(1, _pagina(funcao, titulo, icone, caminho))
+    if nome_perfil in PERFIS_RESPONSAVEIS:
+        paginas.insert(1, st.Page(renderizar_responsaveis, title="Responsáveis por área", icon="👥"))
     if nome_perfil in PERFIS_OCORRENCIAS:
         paginas.insert(1, st.Page(renderizar_ocorrencias, title="Ocorrências", icon="🚑"))
     if nome_perfil in PERFIS_LEITURA:
