@@ -21,6 +21,53 @@ MESES_CURTO = {1: "jan", 2: "fev", 3: "mar", 4: "abr", 5: "mai", 6: "jun",
 FUSO_MANHAS = timezone(timedelta(hours=-4))
 
 
+ICONES_SINAL = {"sem_dados": "⚪", "normal": "🟢", "atencao": "🟡", "alerta": "🟠", "alto": "🔴"}
+LEITURA_ANTIGA_H = 12   # mesmo limite do robô (config/robo.yaml)
+
+
+def status_atual(estacao: dict[str, Any], por_codigo: dict[str, dict[str, Any]],
+                 ultima_leitura: dict[str, dict[str, Any]], agora: datetime | None = None) -> dict[str, Any]:
+    """Nível medido mais recente e status da estação.
+
+    Primeiro a análise do robô (sinal, posição entre seca e cheia recordes); sem ela, a última
+    leitura da ANA, sem classificar (o app não inventa status que o robô não calculou).
+    """
+    from core.robo import ROTULOS_SINAL
+
+    agora = agora or datetime.now(timezone.utc)
+    analise = por_codigo.get(str(estacao.get("codigo_oficial") or ""))
+    leitura = ultima_leitura.get(estacao["id"]) or {}
+    nivel = (analise or {}).get("nivel_cm")
+    quando = (analise or {}).get("data_hora_leitura")
+    if nivel is None and leitura.get("nivel_cm") is not None:
+        nivel, quando = leitura["nivel_cm"], leitura.get("data_hora_leitura")
+    instante = None
+    if quando:
+        try:
+            instante = datetime.fromisoformat(str(quando).replace("Z", "+00:00"))
+            instante = instante if instante.tzinfo else instante.replace(tzinfo=timezone.utc)
+        except ValueError:
+            instante = None
+    antiga = bool(instante and (agora - instante) > timedelta(hours=LEITURA_ANTIGA_H))
+    if analise and analise.get("sinal"):
+        sinal = analise["sinal"]
+        status = f"{ICONES_SINAL.get(sinal, '⚪')} {ROTULOS_SINAL.get(sinal, sinal)}"
+    elif nivel is not None:
+        status = "⚪ Medido (sem análise do robô)"
+    else:
+        status = "⚪ Sem leitura"
+    if antiga and nivel is not None:
+        status += " · leitura antiga"
+    return {
+        # Números vazios ficam None (célula em branco), não "—": a tabela não mistura texto e número.
+        "Nível atual (cm)": round(float(nivel)) if nivel is not None else None,
+        "Status atual": status,
+        "Posição seca→cheia (%)": (round(float(analise["posicao_pct"])) if analise and analise.get("posicao_pct")
+                                   is not None else None),
+        "Medido em": instante.astimezone(FUSO_MANHAS).strftime("%d/%m %H:%M") if instante else "—",
+    }
+
+
 def _data_br(valor: Any) -> str:
     texto = str(valor or "")
     return f"{texto[8:10]}/{texto[5:7]}/{texto[:4]}" if len(texto) >= 10 else texto
@@ -83,6 +130,25 @@ def renderizar_calendario_risco(cliente: Any, perfil: dict[str, Any]) -> None:
         st.error(f"Não foi possível carregar as estações (aplique a migration 202610140004): {erro}")
         return
 
+    # Situação medida agora: análise mais recente do robô por estação e última leitura da ANA.
+    from app.visual import carregar_analises
+
+    por_codigo: dict[str, dict[str, Any]] = {}
+    analise_municipio = carregar_analises(cliente).get(str(municipio_id).strip()) or {}
+    for item in analise_municipio.get("estacoes_json") or []:
+        por_codigo[str(item.get("codigo") or "")] = item
+    ultima_leitura: dict[str, dict[str, Any]] = {}
+    if estacoes:
+        try:
+            desde = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+            for leitura in (cliente.table("leituras").select("estacao_id,nivel_cm,data_hora_leitura")
+                            .in_("estacao_id", [e["id"] for e in estacoes]).gte("data_hora_leitura", desde)
+                            .not_.is_("nivel_cm", "null").order("data_hora_leitura", desc=True)
+                            .limit(2000).execute().data or []):
+                ultima_leitura.setdefault(leitura["estacao_id"], leitura)
+        except Exception:
+            ultima_leitura = {}
+
     # Filtra só estações com marcador histórico
     com_historico = [e for e in estacoes
                      if e.get("cheia_historica_data") or e.get("seca_historica_data")]
@@ -105,10 +171,17 @@ def renderizar_calendario_risco(cliente: Any, perfil: dict[str, Any]) -> None:
     if not com_historico:
         st.info("Nenhuma estação deste município tem marcadores históricos da ANA cadastrados. "
                 "Execute o script de extremos históricos para preencher.")
+        if estacoes:
+            st.subheader("Situação medida agora")
+            st.dataframe([{"Estação": f"{e['nome']} ({e.get('codigo_oficial')})", **status_atual(e, por_codigo, ultima_leitura)}
+                          for e in estacoes], hide_index=True, width="stretch")
         return
 
     # ---------- Tabela por estação ----------
     st.subheader("Estações e períodos críticos")
+    st.caption("**Status atual** = sinal da última análise do robô (a cada 3 h) para o nível medido: "
+               "🟢 Normal · 🟡 Atenção · 🟠 Alerta · 🔴 Alto. **Posição** = onde o nível está entre a seca (0%) "
+               "e a cheia (100%) recordes. \"Leitura antiga\" = mais de 12 h sem dado novo da ANA.")
     linhas_tabela = []
     for e in com_historico:
         cheia_data = e.get("cheia_historica_data")
@@ -130,6 +203,7 @@ def renderizar_calendario_risco(cliente: Any, perfil: dict[str, Any]) -> None:
         linhas_tabela.append({
             "Estação": f"{e['nome']} ({e.get('codigo_oficial')})",
             "Rio": e.get("rio") or "—",
+            **status_atual(e, por_codigo, ultima_leitura),
             "Mês típico cheia": _mes_nome(cheia_mes) if cheia_mes else "—",
             "Mês típico seca": _mes_nome(seca_mes) if seca_mes else "—",
             "Próximo crítico": tipo_proximo.title(),
@@ -166,10 +240,16 @@ def renderizar_calendario_risco(cliente: Any, perfil: dict[str, Any]) -> None:
         seca_data = e.get("seca_historica_data")
         cheia_mes = datetime.fromisoformat(str(cheia_data)).month if cheia_data else None
         seca_mes = datetime.fromisoformat(str(seca_data)).month if seca_data else None
+        atual = status_atual(e, por_codigo, ultima_leitura)
         linhas_relatorio.append({
             "Estação": e["nome"],
             "Código": e.get("codigo_oficial"),
             "Rio": e.get("rio") or "",
+            "Nível atual (cm)": atual["Nível atual (cm)"],
+            # PDF usa fonte Latin-1: o status vai sem o ícone colorido.
+            "Status atual": atual["Status atual"].split(" ", 1)[-1],
+            "Posição seca-cheia (%)": atual["Posição seca→cheia (%)"],
+            "Medido em": atual["Medido em"],
             "Mês típico cheia": _mes_nome(cheia_mes) if cheia_mes else "",
             "Mês típico seca": _mes_nome(seca_mes) if seca_mes else "",
             "Cheia recorde (cm)": e.get("cheia_historica_cm") or "",
